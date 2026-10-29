@@ -1,7 +1,7 @@
 # warframe.market API
 
 This doc covers the public, unauthenticated warframe.market API, last checked against the live API
-on **2026-10-27**. Riven endpoints come first and are covered in full, because they are the only ones
+on **2026-10-27** (auction search and rate limits re-checked **2026-10-29**). Riven endpoints come first and are covered in full, because they are the only ones
 this project calls. Other working endpoints are listed under
 [Other public endpoints](#other-public-endpoints).
 
@@ -14,6 +14,7 @@ this project calls. Other working endpoints are listed under
   - [`GET /v2/riven/attributes`](#get-v2rivenattributes)
   - [`GET /v1/auctions`](#get-v1auctions)
   - [`GET /v1/auctions/search`](#get-v1auctionssearch)
+  - [Crawling a weapon's full riven book](#crawling-a-weapons-full-riven-book)
   - [`GET /v1/auctions/entry/{id}`](#get-v1auctionsentryid), [`.../bids`](#get-v1auctionsentryidbids)
   - [Auction object](#auction-object)
 - [Other public endpoints](#other-public-endpoints)
@@ -44,8 +45,23 @@ this project calls. Other working endpoints are listed under
 
 ### Rate limits
 
-- One limit covers every HTTP endpoint, v1 and v2 alike: **3 requests/second**. Above that,
-  Cloudflare answers `429`. Too many concurrent connections get a `509`.
+- The general limit is **3 requests/second**. Above that, Cloudflare answers `429`. Too many
+  concurrent connections get a `509`. 30 requests at 3/s to `/v2/versions` and to `/v1/auctions`
+  all succeeded.
+- **`/v1/auctions/search` has a much stricter limit of its own.** It acts like a leaky bucket that
+  allows a burst of about 12–15 requests and refills at about 6–7 per minute. Going over it returns
+  `429` with Cloudflare `error code: 1015` and `Retry-After: 120`. Some requests still get through
+  during the penalty. What was observed:
+
+  | Pace | Result |
+  | --- | --- |
+  | no delay | ~13 OK, then `429` |
+  | 1 every 4 s | blocked after 28 |
+  | 1 every 5 s | blocked after 34 |
+  | 1 every 9 s | 50 of 50 OK over 7.4 min |
+
+  Use a token bucket with a burst of about 10 and one token every 9 s, and wait out `Retry-After` on
+  a `429`.
 - Responses are `cf-cache-status: DYNAMIC` with no `ETag` or `Cache-Control`. Caching is up to the
   client: gate manifest refetches on [`/v2/versions`](#get-v2versions).
 
@@ -82,10 +98,11 @@ v1 and v2 use different envelopes and different key casing.
 
 1. Poll `GET /v2/versions` and compare `data.collections.rivens` with the cached hash.
 2. If it changed, refetch `/v2/riven/weapons` and `/v2/riven/attributes`, then upsert them.
-3. To seed listings, run `/v1/auctions/search?type=riven&weapon_url_name={slug}` for each weapon.
-   Search returns at most 100 results, so see [Gotchas](#gotchas).
+3. To seed listings, crawl every weapon with `/v1/auctions/search`. Search returns at most 100
+   results, so see [Crawling a weapon's full riven book](#crawling-a-weapons-full-riven-book).
 4. After that, poll `GET /v1/auctions` for the 100 newest auctions and keep the ones where
-   `item.type == "riven"`.
+   `item.type == "riven"`. That feed only shows new listings, so re-crawl searches periodically to
+   pick up price edits, sales and deletions.
 
 There is **no v2 auction API**. Every auction read goes through v1.
 
@@ -174,33 +191,104 @@ Returns the **100 most recently created** auctions of every type, newest first:
 `item.type` yourself. In one sample, 95 of the 100 were rivens, with a few `lich` and `sister`
 auctions mixed in.
 
+The list is sorted strictly by `created`, not `updated`. An edited auction doesn't move back to the
+top, and sold or deleted auctions just drop out. In one sample the 100 entries covered the last
+~10.5 minutes, about 9.5 new rivens a minute, so polling once a minute doesn't miss new listings.
+This endpoint takes the general 3/s limit, not the auction-search one.
+
 ### `GET /v1/auctions/search`
 
 Headers: `Platform`, `Language`. Returns `{ "payload": { "auctions": [Auction] } }`.
 
 > [!IMPORTANT]
-> A search returns **at most 100 auctions** and has no pagination. Every query against a popular
-> weapon returned exactly 100 (checked with `kulstar`, `rubico`, `torid`, and a filter on positive
-> stats only). To see more of the book for one weapon, run several searches with different `sort_by`
-> and filter values.
+> A search returns **at most 100 auctions** and has no pagination. It also has its own, much
+> stricter [rate limit](#rate-limits). Every query against a popular weapon returned the cap
+> (checked with `kulstar`, `rubico`, `torid`, `burston`, and a filter on positive stats only).
+> `limit`, `page`, `offset`, `skip`, `price_min` and `buyout_price_min` are all silently ignored.
+> To read a weapon's whole book, see
+> [Crawling a weapon's full riven book](#crawling-a-weapons-full-riven-book).
+
+> [!WARNING]
+> A capped page can come back with **fewer than 100** auctions. A filtered `burston` bucket with
+> 102 real listings returned 99 on both sorts. The server seems to drop hidden auctions after
+> applying the cap. Treat any page of about 95 or more as truncated.
 
 | Param | Values | Notes |
 | --- | --- | --- |
 | `type` | `riven` \| `lich` \| `sister` | Required |
 | `weapon_url_name` | riven weapon `slug` | Either this or `positive_stats` is required, otherwise `400 _form requirements_not_met`. An unknown slug returns `400 weapon_url_name item_not_exist`. |
-| `positive_stats` | comma-separated attribute slugs | |
-| `negative_stats` | comma-separated attribute slugs, or `None` | `None` means "has no negative" |
+| `positive_stats` | comma-separated attribute slugs | Matches rivens that have the stat. One riven matches several values, so these can't split a weapon into separate groups. |
+| `negative_stats` | comma-separated attribute slugs, or `none` | `none` (lowercase) means "has no negative". `None` returns `400 negative_stats app.form.invalid`. A riven has at most one negative, so `none` plus each possible negative splits a weapon's rivens into groups that don't overlap. |
 | `operation` | `allOf` \| `anyOf` | How the stat lists combine |
-| `mastery_rank_min`, `mastery_rank_max` | integer | |
-| `re_rolls_min`, `re_rolls_max` | integer | |
-| `mod_rank` | `any` \| `maxed` | |
-| `polarity` | `any` \| `madurai` \| `vazarin` \| `naramon` | Polarities observed in results |
-| `buyout_policy` | `with` \| `direct` | `direct` means only fixed-price sales (`is_direct_sell: true`). `with` means auctions that have a buyout price. |
-| `sort_by` | `price_desc` (default) \| `price_asc` \| `positive_attr_desc` \| `positive_attr_asc` | With the default sort and no `buyout_policy`, `buyout_price: null` auctions come first |
+| `mastery_rank_min`, `mastery_rank_max` | integer | Inclusive. Riven mastery levels run `8`–`16`. |
+| `re_rolls_min`, `re_rolls_max` | integer | Inclusive. Sent twice, the first value wins. |
+| `mod_rank` | `any` \| `maxed` | `0`, `unranked`, etc. return `400 mod_rank app.form.invalid`. There's no "unranked only" filter. |
+| `polarity` | `any` \| `madurai` \| `vazarin` \| `naramon` | Polarities observed in results. Other polarities (e.g. `zenurik`) return `200` with `[]`. |
+| `buyout_policy` | `with` \| `direct` | `direct` means only fixed-price sales (`is_direct_sell: true`). `with` means auctions that have a buyout price. Leave it out to include pure auctions. |
+| `sort_by` | `price_desc` (default) \| `price_asc` \| `positive_attr_desc` \| `positive_attr_asc` | Sorts on `buyout_price`. With no `buyout_policy`, `buyout_price: null` auctions come **first** in `price_desc` and **last** in `price_asc`. Without `positive_stats`, `positive_attr_desc` returned the same page as `price_desc`. |
 
 Lich and sister searches (`type=lich|sister`) use `element`, `ephemera`, `damage_min`, `damage_max`,
 `quirk` and `buyout_policy`, and `sort_by` takes `price_*` or `damage_*`. The sister search isn't in
 the v1 spec but works.
+
+### Crawling a weapon's full riven book
+
+Measured on 2026-10-29 by fully crawling `burston` and 25 randomly chosen weapons, then replaying
+different split orders offline against that data.
+
+**Pair `price_asc` with `price_desc`.** Leave `buyout_policy` out, and treat a `null` buyout as
+infinitely expensive. If the lowest price on the `price_desc` page is **strictly less** than the
+highest price on the `price_asc` page, the two pages together are the whole bucket. That covers up to about 200 auctions in 2 requests. If the asc page is short (under ~95),
+it's already complete and the desc request isn't needed.
+
+**Split only on filters where each riven matches exactly one value.** If the two pages don't
+overlap, split the bucket and recurse:
+
+| Filter | Values | Notes |
+| --- | --- | --- |
+| `mastery_rank_min` = `mastery_rank_max` | `8` … `16` | 9 groups of fairly even size. Best first split. |
+| `polarity` | `madurai`, `vazarin`, `naramon` | 3 roughly equal thirds |
+| `re_rolls_min` / `re_rolls_max` | bands, e.g. `0`, `1–3`, `4–10`, `11–25`, `26–60`, `61–150`, `151+` | Heavily skewed toward high roll counts |
+| `negative_stats` | `none` + every non-`positiveOnly` attribute the weapon's `rivenType` can roll | ~25 values, mostly empty or tiny. Expensive, so use it last. |
+
+`positive_stats`, `mod_rank` and `buyout_policy` don't qualify, because their values overlap.
+
+Recommended order: **mastery rank → polarity → re-roll bands → negative**. Requests needed, out of
+6,436 auctions across the 25 random weapons:
+
+| Split order | Requests/weapon | ×420 weapons | Time at ~6.6 req/min |
+| --- | --- | --- | --- |
+| Best split chosen at every step (needs counts known in advance) | 4.5 | ~1,900 | 4.8 h |
+| mastery rank → polarity → re-rolls → negative | 5.7 | ~2,400 | 6.0 h |
+| re-rolls → polarity → mastery rank → negative | 5.5 | ~2,300 | 5.9 h |
+| polarity → mastery rank → negative → re-rolls | 7.5 | ~3,100 | 7.9 h |
+| negative → polarity → mastery rank → re-rolls | 13.5 | ~5,700 | 14.3 h |
+
+What the crawl found:
+
+- Every random weapon had at least 93 listings, with a mean of 257 and a high of 735 (`zarr`).
+  `burston` alone has 2,033. Expect roughly 100k riven auctions in total.
+- The book turns over fast. Of the 8,469 auctions crawled on 2026-10-29, 78% were created and 89%
+  last updated in October 2026, with a long tail of stale listings back to 2019. 89% of owners were
+  `offline`. No auction had `visible: false` or `closed: true`, so hidden ones aren't returned at all.
+- The right split depends on the bucket's size. Up to ~200 needs no split. About 200–450 is best
+  split by polarity. About 450–1,500 is best split by mastery rank. Larger still is best split by
+  polarity and then mastery rank. On re-crawls, store each weapon's last count and jump straight to
+  the right split, skipping the root pair.
+- Every auction returned matched its filters. No filter was loosely applied.
+
+**A crawl isn't a snapshot.** At the search rate limit, one weapon can take minutes and a full seed
+takes hours, so the book changes while you read it:
+
+- An auction deleted or sold mid-crawl is simply missing from the pages that come after it.
+  Auctions deleted after their page was read stay in your data until the next crawl of that weapon.
+- An auction whose price is edited between the asc and desc requests can shift across the cutoff,
+  so a listing can be missed or picked up twice. Upsert on `id` to absorb duplicates.
+- Auctions created mid-crawl may or may not show up. Poll `/v1/auctions` alongside the crawl to
+  catch them.
+- To find auctions that have gone, compare each crawl with the previous crawl of the same weapon.
+  An `id` missing from a complete crawl is gone. `/v1/auctions/entry/{id}` returning `404` confirms
+  it, but checking every id that way costs one request each.
 
 ### `GET /v1/auctions/entry/{id}`
 
@@ -359,7 +447,12 @@ described above.
 
 - **Auction search stops at 100 results** and has no pagination or sort-by-newest. You can't read a
   weapon's whole riven book in one call. Use `/v1/auctions` for new listings and per-weapon searches
-  to seed and refresh.
+  to seed and refresh. See [Crawling a weapon's full riven book](#crawling-a-weapons-full-riven-book).
+- **Auction search is rate-limited to about 6–7 requests a minute**, not 3/s. A `429` there carries
+  `Retry-After: 120`.
+- **A capped search page can hold 99 auctions** instead of 100. Don't treat "fewer than 100" as
+  "complete".
+- **`/v1/auctions` is ordered by `created`.** Price edits, sales and deletions never show up there.
 - **`/v1/auctions` ignores `type`**, so filter on `item.type == "riven"`.
 - **v1 is snake_case and v2 is camelCase.** The same idea has different names in each: a v2 `slug`
   shows up in v1 as `weapon_url_name` or as an attribute's `url_name`.
