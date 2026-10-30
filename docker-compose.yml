@@ -1,0 +1,32 @@
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: riven_helper
+      POSTGRES_USER: riven_helper
+      POSTGRES_PASSWORD: riven_helper
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - riven_helper_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U riven_helper -d riven_helper"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - riven_helper_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  riven_helper_pgdata:
+  riven_helper_redisdata:

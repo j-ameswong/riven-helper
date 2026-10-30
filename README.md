@@ -2,7 +2,7 @@
 
 This project is intended to be a single-user, self hosted warframe.market api wrapper specifically for browsing riven mods and watchlisting certain trends to receive notifications through ntfy.sh. It also offers static resources including a riven grade calculator with OCR/manual input/warframe.market auction link, stat range lookups, and available riven attributes for different weapon categories.
 
-There's still no code, currently still busy planning.
+Currently in early stages, no features implemented yet.
 
 ## Planned features (tentative)
 
