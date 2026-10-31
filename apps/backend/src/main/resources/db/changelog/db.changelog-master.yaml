@@ -8,4 +8,6 @@
 # Migration files live in this directory and are applied by Liquibase at
 # startup (see spring.liquibase.change-log in application.yaml).
 databaseChangeLog:
-  []
+  - include:
+      file: 001-weapons-and-attributes.yaml
+      relativeToChangelogFile: true

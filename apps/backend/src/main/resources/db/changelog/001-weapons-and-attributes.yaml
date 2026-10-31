@@ -1,0 +1,164 @@
+# Riven weapon and attribute manifests, synced from /v2/riven/weapons and
+# /v2/riven/attributes. See docs/warframe-market-api.md for field meanings.
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-weapons
+      author: Cheng An Wong
+      changes:
+        - createTable:
+            tableName: weapons
+            columns:
+              - column:
+                  name: weapon_id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_weapons
+              - column:
+                  name: api_weapon_id
+                  type: text
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_weapons_api_weapon_id
+              - column:
+                  name: slug
+                  type: text
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_weapons_slug
+              - column:
+                  name: game_ref
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: weapon_group
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: riven_type
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: req_mastery_rank
+                  type: smallint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: name
+                  type: text
+                  constraints:
+                    nullable: false
+        - sql:
+            sql: >-
+              ALTER TABLE weapons
+                ADD CONSTRAINT ck_weapons_weapon_group CHECK (weapon_group IN
+                  ('primary', 'secondary', 'melee', 'archgun', 'sentinel', 'zaw', 'kitgun')),
+                ADD CONSTRAINT ck_weapons_riven_type CHECK (riven_type IN
+                  ('rifle', 'shotgun', 'pistol', 'melee', 'zaw', 'kitgun', 'archgun')),
+                ADD CONSTRAINT ck_weapons_archgun_riven_type CHECK
+                  ((weapon_group = 'archgun') = (riven_type = 'archgun')),
+                ADD CONSTRAINT ck_weapons_req_mastery_rank CHECK (req_mastery_rank >= 0);
+      rollback:
+        - dropTable:
+            tableName: weapons
+
+  - changeSet:
+      id: 001-create-attributes
+      author: Cheng An Wong
+      changes:
+        - createTable:
+            tableName: attributes
+            columns:
+              - column:
+                  name: attribute_id
+                  type: bigint
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_attributes
+              - column:
+                  name: api_attribute_id
+                  type: text
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_attributes_api_attribute_id
+              - column:
+                  name: slug
+                  type: text
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_attributes_slug
+              - column:
+                  name: game_ref
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: attribute_group
+                  type: text
+                  constraints:
+                    nullable: false
+              # Empty for attributes that only roll as a negative.
+              - column:
+                  name: prefix
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: suffix
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: unit
+                  type: text
+              - column:
+                  name: name
+                  type: text
+                  constraints:
+                    nullable: false
+              # NULL means every riven type can roll it.
+              - column:
+                  name: exclusive_to
+                  type: text[]
+              - column:
+                  name: positive_only
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: negative_only
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+              - column:
+                  name: positive_is_negative
+                  type: boolean
+                  defaultValueBoolean: false
+                  constraints:
+                    nullable: false
+        - sql:
+            sql: >-
+              ALTER TABLE attributes
+                ADD CONSTRAINT ck_attributes_attribute_group CHECK (attribute_group IN
+                  ('default', 'melee')),
+                ADD CONSTRAINT ck_attributes_unit CHECK (unit IN
+                  ('percent', 'multiply', 'seconds')),
+                ADD CONSTRAINT ck_attributes_exclusive_to CHECK (
+                  cardinality(exclusive_to) > 0
+                  AND exclusive_to <@ ARRAY['rifle', 'shotgun', 'pistol', 'melee', 'zaw', 'kitgun', 'archgun']),
+                ADD CONSTRAINT ck_attributes_positive_or_negative_only CHECK
+                  (NOT (positive_only AND negative_only));
+      rollback:
+        - dropTable:
+            tableName: attributes
