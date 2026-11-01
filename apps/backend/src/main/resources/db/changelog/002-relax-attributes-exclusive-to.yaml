@@ -1,0 +1,22 @@
+# Allow an empty exclusive_to array. NULL and '{}' both mean every riven type
+# can roll the attribute, so the importer doesn't have to tell a missing field
+# apart from an empty list.
+databaseChangeLog:
+  - changeSet:
+      id: 002-relax-attributes-exclusive-to
+      author: Cheng An Wong
+      changes:
+        - sql:
+            sql: >-
+              ALTER TABLE attributes
+                DROP CONSTRAINT ck_attributes_exclusive_to,
+                ADD CONSTRAINT ck_attributes_exclusive_to CHECK (
+                  exclusive_to <@ ARRAY['rifle', 'shotgun', 'pistol', 'melee', 'zaw', 'kitgun', 'archgun']);
+      rollback:
+        - sql:
+            sql: >-
+              ALTER TABLE attributes
+                DROP CONSTRAINT ck_attributes_exclusive_to,
+                ADD CONSTRAINT ck_attributes_exclusive_to CHECK (
+                  cardinality(exclusive_to) > 0
+                  AND exclusive_to <@ ARRAY['rifle', 'shotgun', 'pistol', 'melee', 'zaw', 'kitgun', 'archgun']);

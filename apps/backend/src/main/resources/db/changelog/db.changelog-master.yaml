@@ -11,3 +11,6 @@ databaseChangeLog:
   - include:
       file: 001-weapons-and-attributes.yaml
       relativeToChangelogFile: true
+  - include:
+      file: 002-relax-attributes-exclusive-to.yaml
+      relativeToChangelogFile: true
