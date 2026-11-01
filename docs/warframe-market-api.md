@@ -146,6 +146,9 @@ Returns every weapon that can have a riven: 420 entries, about 160 KB. `data` is
 `group` and `rivenType` are not the same thing. For example, archguns are `group: archgun`,
 `rivenType: rifle`, and sentinel weapons map to `rifle`, `melee`, `pistol` or `shotgun`.
 
+> [!NOTE]
+> **This project remaps archguns to `rivenType: archgun` on import as archgun rivens are their own
+> riven type in game, and attribute `exclusiveTo` lists already treat them that way anyways.
 ```json
 {
   "id": "5c5ca81696e8d2003834fdcc",
@@ -175,7 +178,7 @@ Returns every riven stat: 50 entries, about 15 KB. `data` is an array of:
 | `group` | string | always | `default` or `melee` |
 | `prefix`, `suffix` | string | always | Riven name fragments, e.g. `Ampi` / `Bin` |
 | `unit` | string | 46/50 | `percent`, `multiply`, `seconds`. Missing on `punch_through`, `range`, `channeling_damage`, `parry_angle`. |
-| `exclusiveTo` | string[] | 24/50 | Riven types that can roll it, e.g. `["melee","zaw"]`. Missing means any type. Includes `archgun`, which is not a `rivenType` value. |
+| `exclusiveTo` | string[] | 24/50 | Riven types that can roll it, e.g. `["melee","zaw"]`. Missing means any type. Includes `archgun`, which is remapped from `group` (see above) |
 | `positiveOnly` | `true` | 17/50 | Can't roll as a negative (all elements, `punch_through`, …) |
 | `negativeOnly` | `true` | 1/50 | `chance_to_gain_combo_count` |
 | `positiveIsNegative` | `true` | 1/50 | `recoil`: a positive number is the bad side |
@@ -249,7 +252,7 @@ overlap, split the bucket and recurse:
 | `mastery_rank_min` = `mastery_rank_max` | `8` … `16` | 9 groups of fairly even size. Best first split. |
 | `polarity` | `madurai`, `vazarin`, `naramon` | 3 roughly equal thirds |
 | `re_rolls_min` / `re_rolls_max` | bands, e.g. `0`, `1–3`, `4–10`, `11–25`, `26–60`, `61–150`, `151+` | Heavily skewed toward high roll counts |
-| `negative_stats` | `none` + every non-`positiveOnly` attribute the weapon's `rivenType` can roll | ~25 values, mostly empty or tiny. Expensive, so use it last. |
+| `negative_stats` | `none` + every non-`positiveOnly` attribute the weapon's `rivenType` (`archgun` for archguns) can roll | ~25 values, mostly empty or tiny. Expensive, so use it last. |
 
 `positive_stats`, `mod_rank` and `buyout_policy` don't qualify, because their values overlap.
 
@@ -457,7 +460,8 @@ described above.
 - **v1 is snake_case and v2 is camelCase.** The same idea has different names in each: a v2 `slug`
   shows up in v1 as `weapon_url_name` or as an attribute's `url_name`.
 - **`group` ≠ `rivenType`** on riven weapons, and `exclusiveTo` uses a mix of both vocabularies
-  (`archgun`).
+  (`archgun`). Archguns come back as `rivenType: rifle`, but this project stores them as `archgun`
+  to match `exclusiveTo`.
 - **`positive` ≠ sign of `value`** on auction attributes.
 - Auction ids expire. `/v1/auctions/entry/{id}` returns `404` once an auction is gone.
 - An empty collection (`[]`, `data: []`, `bids: []`) is a successful response.
