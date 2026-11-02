@@ -11,3 +11,18 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: none
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+riven-helper:
+  rate-limits:
+    # 3 requests/s is the documented limit; 350ms leaves some headroom.
+    general:
+      interval: 350ms
+      burst: 1
+    # Measured as a burst of ~12-15 refilling at ~6-7/min; 1 every 9s held up.
+    auction-search:
+      interval: 9s
+      burst: 10
