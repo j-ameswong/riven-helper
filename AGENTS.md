@@ -8,6 +8,10 @@ This project makes use of the warframe.market API, documented at `docs/warframe-
 
 ```User-Agent: RivenHelper/0.0.1 (+https://github.com/j-ameswong/riven-helper)```
 
+## Choosing approaches
+
+Prefer current, actively developed approaches over older conventions, even when they're less widely known (e.g. `@HttpExchange` over `RestTemplate`). Say so when a choice is new or uncommon, so it's a deliberate one.
+
 ## Useful Commands
 
 Replace this section with run and test commands when they're available.
