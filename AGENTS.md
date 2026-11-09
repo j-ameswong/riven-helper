@@ -8,13 +8,28 @@ This project makes use of the warframe.market API, documented at `docs/warframe-
 
 ```User-Agent: RivenHelper/0.0.1 (+https://github.com/j-ameswong/riven-helper)```
 
+## Null safety
+
+Backend main code is checked by NullAway at compile time: everything is non-null unless annotated JSpecify `@Nullable`. Only packages with a `@NullMarked` `package-info.java` are checked, so give every new package one. Jackson ignores these annotations, so a non-null field on an API DTO needs `@JsonSetter(nulls = Nulls.FAIL)` to reject a missing or `null` value at runtime.
+
 ## Choosing approaches
 
 Prefer current, actively developed approaches over older conventions, even when they're less widely known (e.g. `@HttpExchange` over `RestTemplate`). Say so when a choice is new or uncommon, so it's a deliberate one.
 
 ## Useful Commands
 
-Replace this section with run and test commands when they're available.
+Java 25 (see `.sdkmanrc`; `sdk env` picks it up). Backend commands run from `apps/backend`.
+
+```sh
+docker compose up -d                       # Postgres and Redis, from the repo root
+./mvnw spring-boot:run                     # run the backend on :8080; syncs riven manifests at startup
+./mvnw test                                # all tests; needs Docker for Testcontainers
+./mvnw test -Dtest=WarframeMarketRivenSyncServiceTest   # one test class
+./mvnw compile                             # includes the NullAway check
+curl -X POST 'localhost:8080/api/manifests/rivens/sync?force=true'   # force a manifest re-sync
+```
+
+Connection settings default to the compose services and can be overridden with `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `REDIS_HOST` and `REDIS_PORT`.
 
 ---
 
