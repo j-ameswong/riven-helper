@@ -26,7 +26,7 @@ There will be 2 parts to this,
 - Postgres, with Redis as a shared rate limiter and caching service
 - Sveltekit, never used it before but I'll be the only user so IDGAF
 
-As a fun challenge, I'm only allowed to chat with Claude, and 'pair program' with local LLM.
+~~As a fun challenge, I'm only allowed to chat with Claude, and 'pair program' with local LLM.~~
 
 ## Plan
 
