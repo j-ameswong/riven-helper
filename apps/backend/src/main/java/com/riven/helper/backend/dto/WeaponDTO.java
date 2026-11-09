@@ -3,6 +3,8 @@ package com.riven.helper.backend.dto;
 import java.util.Map;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonSetter;
+import com.fasterxml.jackson.annotation.Nulls;
 import com.riven.helper.backend.domain.RivenType;
 import com.riven.helper.backend.domain.WeaponGroup;
 
@@ -18,11 +20,11 @@ import com.riven.helper.backend.domain.WeaponGroup;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record WeaponDTO(
-		String id,
-		String slug,
-		String gameRef,
-		WeaponGroup group,
-		RivenType rivenType,
+		@JsonSetter(nulls = Nulls.FAIL) String id,
+		@JsonSetter(nulls = Nulls.FAIL) String slug,
+		@JsonSetter(nulls = Nulls.FAIL) String gameRef,
+		@JsonSetter(nulls = Nulls.FAIL) WeaponGroup group,
+		@JsonSetter(nulls = Nulls.FAIL) RivenType rivenType,
 		int reqMasteryRank,
-		Map<String, I18nDTO> i18n) {
+		@JsonSetter(nulls = Nulls.FAIL, contentNulls = Nulls.FAIL) Map<String, I18nDTO> i18n) {
 }

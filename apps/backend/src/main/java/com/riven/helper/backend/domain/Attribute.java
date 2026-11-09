@@ -12,6 +12,7 @@ import jakarta.persistence.Table;
 
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
+import org.jspecify.annotations.Nullable;
 
 /**
  * A riven stat, synced from /v2/riven/attributes. The database schema is owned
@@ -24,7 +25,7 @@ public class Attribute {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long attributeId;
+	private @Nullable Long attributeId;
 
 	private String apiAttributeId;
 
@@ -42,14 +43,14 @@ public class Attribute {
 
 	// Null on stats such as punch_through, range, channeling_damage, parry_angle.
 	@Enumerated(EnumType.STRING)
-	private Unit unit;
+	private @Nullable Unit unit;
 
 	private String name;
 
 	// Null or empty means every riven type can roll it.
 	@JdbcTypeCode(SqlTypes.ARRAY)
 	@Enumerated(EnumType.STRING)
-	private List<RivenType> exclusiveTo;
+	private @Nullable List<RivenType> exclusiveTo;
 
 	private boolean positiveOnly;
 
@@ -58,11 +59,11 @@ public class Attribute {
 	// A positive number is the bad side, e.g. recoil.
 	private boolean positiveIsNegative;
 
-	public Long getAttributeId() {
+	public @Nullable Long getAttributeId() {
 		return attributeId;
 	}
 
-	public void setAttributeId(Long attributeId) {
+	public void setAttributeId(@Nullable Long attributeId) {
 		this.attributeId = attributeId;
 	}
 
@@ -114,11 +115,11 @@ public class Attribute {
 		this.suffix = suffix;
 	}
 
-	public Unit getUnit() {
+	public @Nullable Unit getUnit() {
 		return unit;
 	}
 
-	public void setUnit(Unit unit) {
+	public void setUnit(@Nullable Unit unit) {
 		this.unit = unit;
 	}
 
@@ -130,11 +131,11 @@ public class Attribute {
 		this.name = name;
 	}
 
-	public List<RivenType> getExclusiveTo() {
+	public @Nullable List<RivenType> getExclusiveTo() {
 		return exclusiveTo;
 	}
 
-	public void setExclusiveTo(List<RivenType> exclusiveTo) {
+	public void setExclusiveTo(@Nullable List<RivenType> exclusiveTo) {
 		this.exclusiveTo = exclusiveTo;
 	}
 

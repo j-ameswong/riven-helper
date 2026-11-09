@@ -1,16 +1,20 @@
 package com.riven.helper.backend.dto;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import com.riven.helper.backend.domain.AttributeGroup;
 import com.riven.helper.backend.domain.RivenType;
 import com.riven.helper.backend.domain.Unit;
 import com.riven.helper.backend.domain.WeaponGroup;
 
+import tools.jackson.databind.exc.InvalidNullException;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -95,6 +99,41 @@ class RivenManifestDTOTest {
 		assertThat(attribute.positiveOnly()).isFalse();
 		assertThat(attribute.negativeOnly()).isFalse();
 		assertThat(attribute.positiveIsNegative()).isFalse();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {
+			// slug missing
+			"""
+			{ "id": "a", "gameRef": "g", "group": "primary", "rivenType": "rifle", "reqMasteryRank": 0,
+			  "i18n": { "en": { "name": "A" } } }
+			""",
+			// slug explicitly null
+			"""
+			{ "id": "a", "slug": null, "gameRef": "g", "group": "primary", "rivenType": "rifle",
+			  "reqMasteryRank": 0, "i18n": { "en": { "name": "A" } } }
+			""",
+			// null i18n entry
+			"""
+			{ "id": "a", "slug": "a", "gameRef": "g", "group": "primary", "rivenType": "rifle",
+			  "reqMasteryRank": 0, "i18n": { "en": null } }
+			""",
+			// name missing
+			"""
+			{ "id": "a", "slug": "a", "gameRef": "g", "group": "primary", "rivenType": "rifle",
+			  "reqMasteryRank": 0, "i18n": { "en": {} } }
+			""",
+	})
+	void rejectsWeaponWithANullRequiredField(String json) {
+		assertThatThrownBy(() -> mapper.readValue(json, WeaponDTO.class)).isInstanceOf(InvalidNullException.class);
+	}
+
+	@Test
+	void rejectsAttributeWithANullExclusiveToEntry() {
+		assertThatThrownBy(() -> mapper.readValue("""
+				{ "id": "a", "slug": "a", "gameRef": "g", "group": "default", "prefix": "", "suffix": "s",
+				  "exclusiveTo": [null], "i18n": { "en": { "name": "A" } } }
+				""", AttributeDTO.class)).isInstanceOf(InvalidNullException.class);
 	}
 
 }

@@ -3,6 +3,8 @@ package com.riven.helper.backend.dto;
 import java.util.List;
 import java.util.Map;
 
+import org.jspecify.annotations.Nullable;
+
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import com.fasterxml.jackson.annotation.Nulls;
@@ -24,16 +26,16 @@ import com.riven.helper.backend.domain.Unit;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record AttributeDTO(
-		String id,
-		String slug,
-		String gameRef,
-		AttributeGroup group,
-		String prefix,
-		String suffix,
-		Unit unit,
-		List<RivenType> exclusiveTo,
+		@JsonSetter(nulls = Nulls.FAIL) String id,
+		@JsonSetter(nulls = Nulls.FAIL) String slug,
+		@JsonSetter(nulls = Nulls.FAIL) String gameRef,
+		@JsonSetter(nulls = Nulls.FAIL) AttributeGroup group,
+		@JsonSetter(nulls = Nulls.FAIL) String prefix,
+		@JsonSetter(nulls = Nulls.FAIL) String suffix,
+		@Nullable Unit unit,
+		@JsonSetter(contentNulls = Nulls.FAIL) @Nullable List<RivenType> exclusiveTo,
 		@JsonSetter(nulls = Nulls.AS_EMPTY) boolean positiveOnly,
 		@JsonSetter(nulls = Nulls.AS_EMPTY) boolean negativeOnly,
 		@JsonSetter(nulls = Nulls.AS_EMPTY) boolean positiveIsNegative,
-		Map<String, I18nDTO> i18n) {
+		@JsonSetter(nulls = Nulls.FAIL, contentNulls = Nulls.FAIL) Map<String, I18nDTO> i18n) {
 }

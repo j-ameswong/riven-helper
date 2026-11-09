@@ -14,3 +14,6 @@ databaseChangeLog:
   - include:
       file: 002-relax-attributes-exclusive-to.yaml
       relativeToChangelogFile: true
+  - include:
+      file: 003-sync-state.yaml
+      relativeToChangelogFile: true

@@ -8,6 +8,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+import org.jspecify.annotations.Nullable;
+
 /**
  * A weapon that can take a riven, synced from /v2/riven/weapons. The database
  * schema is owned by Liquibase (see db/changelog/001-weapons-and-attributes.yaml);
@@ -19,7 +21,7 @@ public class Weapon {
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	private Long weaponId;
+	private @Nullable Long weaponId;
 
 	private String apiWeaponId;
 
@@ -37,11 +39,11 @@ public class Weapon {
 
 	private String name;
 
-	public Long getWeaponId() {
+	public @Nullable Long getWeaponId() {
 		return weaponId;
 	}
 
-	public void setWeaponId(Long weaponId) {
+	public void setWeaponId(@Nullable Long weaponId) {
 		this.weaponId = weaponId;
 	}
 

@@ -1,6 +1,7 @@
 package com.riven.helper.backend.dto;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import java.util.List;
@@ -10,6 +11,7 @@ import org.junit.jupiter.api.Test;
 import com.riven.helper.backend.domain.RivenType;
 
 import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.exc.InvalidNullException;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -81,6 +83,31 @@ class V2ResponseDTOTest {
 
 		assertThat(response.data()).isNull();
 		assertThat(response.error().get("request").get(0).asString()).isEqualTo("app.something.went_wrong");
+		assertThatThrownBy(() -> V2ResponseDTO.requireData(response))
+				.hasMessageContaining("app.something.went_wrong");
+	}
+
+	@Test
+	void requireDataRejectsAnEmptyBodyOrMissingDataAndReturnsPresentData() {
+		assertThatThrownBy(() -> V2ResponseDTO.requireData(null)).isInstanceOf(IllegalStateException.class);
+		assertThatThrownBy(() -> V2ResponseDTO.requireData(new V2ResponseDTO<>("0.25.0", null, null)))
+				.isInstanceOf(IllegalStateException.class);
+		assertThat(V2ResponseDTO.requireData(new V2ResponseDTO<>("0.25.0", List.of(), null))).isEmpty();
+	}
+
+	@Test
+	void rejectsNullListElements() {
+		assertThatThrownBy(() -> mapper.readValue("""
+				{ "apiVersion": "0.25.0", "data": [null], "error": null }
+				""", new TypeReference<V2ResponseDTO<List<WeaponDTO>>>() {
+				})).isInstanceOf(InvalidNullException.class);
+	}
+
+	@Test
+	void rejectsVersionsWithoutARivensHash() {
+		assertThatThrownBy(() -> mapper.readValue("""
+				{ "id": "a", "collections": { "items": "aXRlbXM=" } }
+				""", VersionsDTO.class)).isInstanceOf(InvalidNullException.class);
 	}
 
 }

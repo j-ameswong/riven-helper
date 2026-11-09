@@ -1,0 +1,31 @@
+# The last synced /v2/versions hash per manifest collection, e.g. name 'rivens'.
+# Written in the same transaction as the sync it records. Delete a row to make
+# that collection re-sync on the next poll, e.g. after changing the import
+# mapping or adding a manifest column.
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-sync-state
+      author: Cheng An Wong
+      changes:
+        - createTable:
+            tableName: sync_state
+            columns:
+              - column:
+                  name: name
+                  type: text
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_sync_state
+              - column:
+                  name: value
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: updated_at
+                  type: timestamptz
+                  constraints:
+                    nullable: false
+      rollback:
+        - dropTable:
+            tableName: sync_state

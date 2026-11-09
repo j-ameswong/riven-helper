@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 
-@SpringBootTest
+@SpringBootTest(properties = "riven-helper.scheduling.enabled=false")
 @Import(TestcontainersConfiguration.class)
 class RivenHelperBackendApplicationTests {
 

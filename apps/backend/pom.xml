@@ -28,6 +28,8 @@
 	</scm>
 	<properties>
 		<java.version>25</java.version>
+		<error-prone.version>2.51.0</error-prone.version>
+		<nullaway.version>0.14.3</nullaway.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -89,6 +91,36 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<!-- NullAway fails the build on unchecked nulls in @NullMarked packages.
+			     Main code only; javac needs the exports in .mvn/jvm.config. -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-compiler-plugin</artifactId>
+				<executions>
+					<execution>
+						<id>default-compile</id>
+						<configuration>
+							<compilerArgs combine.children="append">
+								<arg>-XDcompilePolicy=simple</arg>
+								<arg>--should-stop=ifError=FLOW</arg>
+								<arg>-Xplugin:ErrorProne -XepDisableAllChecks -Xep:NullAway:ERROR -XepOpt:NullAway:OnlyNullMarked=true -XepOpt:NullAway:JSpecifyMode=true -XepOpt:NullAway:ExcludedClassAnnotations=jakarta.persistence.Entity</arg>
+							</compilerArgs>
+							<annotationProcessorPaths>
+								<path>
+									<groupId>com.google.errorprone</groupId>
+									<artifactId>error_prone_core</artifactId>
+									<version>${error-prone.version}</version>
+								</path>
+								<path>
+									<groupId>com.uber.nullaway</groupId>
+									<artifactId>nullaway</artifactId>
+									<version>${nullaway.version}</version>
+								</path>
+							</annotationProcessorPaths>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
 		</plugins>
 	</build>
