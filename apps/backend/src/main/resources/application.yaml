@@ -16,6 +16,12 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
 
+# /actuator/health checks Postgres, Redis and disk space
+management:
+  endpoint:
+    health:
+      show-details: always
+
 riven-helper:
   rate-limits:
     # 3 requests/s is the documented limit; 350ms leaves some headroom.

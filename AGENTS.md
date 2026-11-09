@@ -27,6 +27,7 @@ docker compose up -d                       # Postgres and Redis, from the repo r
 ./mvnw test -Dtest=WarframeMarketRivenSyncServiceTest   # one test class
 ./mvnw compile                             # includes the NullAway check
 curl -X POST 'localhost:8080/api/manifests/rivens/sync?force=true'   # force a manifest re-sync
+curl localhost:8080/actuator/health        # UP/DOWN with Postgres, Redis and disk space details
 ```
 
 Connection settings default to the compose services and can be overridden with `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `REDIS_HOST` and `REDIS_PORT`.

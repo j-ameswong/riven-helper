@@ -28,9 +28,7 @@ import com.riven.helper.backend.repository.WeaponRepository;
 
 /**
  * Keeps the weapons and attributes tables in step with warframe.market's riven
- * manifests. The {@code rivens} hash from /v2/versions is stored in
- * {@code sync_state} in the same transaction as the upsert, so it only moves
- * once the tables match it.
+ * manifests.
  */
 @Service
 public class WarframeMarketRivenSyncService {
@@ -72,12 +70,10 @@ public class WarframeMarketRivenSyncService {
 
 	/**
 	 * Syncs the riven manifests if their hash changed, or regardless with
-	 * {@code force}. Synchronized so a forced sync and a scheduled one can't
-	 * insert the same rows at once.
+	 * {@code force}.
 	 */
 	public synchronized SyncResult sync(boolean force) {
-		// Read the hash before the manifests: if they change in between, the stored
-		// hash is the older one and the next poll syncs again
+		// Only sync if riven hash has changed
 		String hash = requireData(client.getVersions()).collections().rivens();
 		if (!force && Optional.of(hash).equals(storedHash())) {
 			return new SyncResult(hash, false);
@@ -85,7 +81,6 @@ public class WarframeMarketRivenSyncService {
 
 		List<WeaponDTO> weapons = requireData(client.getWeapons());
 		List<AttributeDTO> attributes = requireData(client.getAttributes());
-		// An empty manifest is never real, and syncing it would mark the hash as done
 		if (weapons.isEmpty() || attributes.isEmpty()) {
 			throw new IllegalStateException(
 					"Empty riven manifest: %d weapons, %d attributes".formatted(weapons.size(), attributes.size()));
