@@ -8,6 +8,7 @@ import org.springframework.web.service.annotation.GetExchange;
 import org.springframework.web.service.annotation.HttpExchange;
 
 import com.riven.helper.backend.dto.AttributeDTO;
+import com.riven.helper.backend.dto.V1AuctionsDTO;
 import com.riven.helper.backend.dto.V2ResponseDTO;
 import com.riven.helper.backend.dto.VersionsDTO;
 import com.riven.helper.backend.dto.WeaponDTO;
@@ -31,5 +32,9 @@ interface WarframeMarketRestClient {
 
 	@GetExchange("/v2/riven/attributes")
 	@Nullable V2ResponseDTO<List<AttributeDTO>> getAttributes();
+
+	/** The 100 most recently created auctions of every type, newest first. */
+	@GetExchange("/v1/auctions")
+	@Nullable V1AuctionsDTO getAuctions();
 
 }

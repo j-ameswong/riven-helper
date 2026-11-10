@@ -1,0 +1,128 @@
+# Riven auctions archived from /v1/auctions (and later the per-weapon crawl).
+# Nothing is hard-deleted. See the README's plan step 4 for the design.
+databaseChangeLog:
+  - changeSet:
+      id: 004-create-riven-auctions
+      author: Cheng An Wong
+      changes:
+        - createTable:
+            tableName: riven_auctions
+            columns:
+              - column:
+                  name: auction_id
+                  type: text
+                  constraints:
+                    primaryKey: true
+                    primaryKeyName: pk_riven_auctions
+              # No foreign key to weapons: a new weapon can be listed before
+              # the manifest sync picks it up, and the auction must still be kept.
+              - column:
+                  name: weapon_slug
+                  type: text
+                  constraints:
+                    nullable: false
+              # Sellers relist the same riven under new auction ids
+              - column:
+                  name: owner_id
+                  type: text
+                  constraints:
+                    nullable: false
+              - column:
+                  name: created_at
+                  type: timestamptz
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_updated_at
+                  type: timestamptz
+                  constraints:
+                    nullable: false
+              # Set when a complete crawl of the weapon no longer returns it,
+              # or when it's missing in a poll where it's supposed to be sandwiched
+              - column:
+                  name: removed_at
+                  type: timestamptz
+        - createIndex:
+            tableName: riven_auctions
+            indexName: ix_riven_auctions_created_at
+            columns:
+              - column:
+                  name: created_at
+      rollback:
+        - dropTable:
+            tableName: riven_auctions
+
+  - changeSet:
+      id: 004-create-riven-snapshots
+      author: Cheng An Wong
+      changes:
+        - createTable:
+            tableName: riven_snapshots
+            columns:
+              - column:
+                  name: auction_id
+                  type: text
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_riven_snapshots_auction
+                    references: riven_auctions(auction_id)
+              # The auction's updated timestamp this version was seen at
+              - column:
+                  name: updated_at
+                  type: timestamptz
+                  constraints:
+                    nullable: false
+              - column:
+                  name: starting_price
+                  type: integer
+                  constraints:
+                    nullable: false
+              # NULL for a pure auction with no buyout
+              - column:
+                  name: buyout_price
+                  type: integer
+              - column:
+                  name: is_direct_sell
+                  type: boolean
+                  constraints:
+                    nullable: false
+              - column:
+                  name: re_rolls
+                  type: integer
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mod_rank
+                  type: smallint
+                  constraints:
+                    nullable: false
+              - column:
+                  name: mastery_level
+                  type: smallint
+                  constraints:
+                    nullable: false
+              # No CHECK: an unexpected polarity must not fail the whole poll
+              - column:
+                  name: polarity
+                  type: text
+                  constraints:
+                    nullable: false
+              # item.attributes as sent: [{url_name, value, positive}]
+              - column:
+                  name: attributes
+                  type: jsonb
+                  constraints:
+                    nullable: false
+              # The whole auction object as sent, since history can't be refetched
+              - column:
+                  name: raw
+                  type: jsonb
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: riven_snapshots
+            columnNames: auction_id, updated_at
+            constraintName: pk_riven_snapshots
+      rollback:
+        - dropTable:
+            tableName: riven_snapshots

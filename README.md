@@ -2,7 +2,7 @@
 
 This project is intended to be a single-user, self hosted warframe.market api wrapper specifically for browsing riven mods and watchlisting certain trends to receive notifications through ntfy.sh. It also offers static resources including a riven grade calculator with OCR/manual input/warframe.market auction link, stat range lookups, and available riven attributes for different weapon categories.
 
-Currently in early stages, no features implemented yet.
+Currently in early stages: riven manifests sync, and new riven auctions are archived from `/v1/auctions` every minute.
 
 ## Planned features (tentative)
 
@@ -39,9 +39,9 @@ There will be 2 parts to this,
 
 Nothing is hard-deleted, and each price a seller sets is kept as its own row, because it represents a pricing decision made based on the market at that time:
 
-- `riven_auctions` holds identity and lifecycle, one row per auction `id`: `weapon_slug`, `created_at`, `last_updated_at`, a reference to its metadata at `riven_snapshot_id` and a nullable `removed_at` as the soft delete. Set `removed_at` when a complete crawl of the weapon no longer returns the auction.
+- `riven_auctions` holds identity and lifecycle, one row per auction `id`: `weapon_slug` (no foreign key, so a weapon newer than the manifest sync is still kept), `owner_id` (to spot relists), `created_at`, `last_updated_at` and a nullable `removed_at` as the soft delete. Set `removed_at` when a complete crawl of the weapon no longer returns the auction. The latest version is the snapshot with the newest `updated_at`.
   > Note: there's no way to tell between auction cancellations and sales
-- `riven_snapshots` holds one row per observed version of an auction, keyed `(auction_id, updated_at)` on a snapshot of `riven_auctions.updated_at`. Each row snapshots everything that can change: `buyout_price`, `starting_price`, `is_direct_sell`, `re_rolls`, `mod_rank`, `mastery_level`, `polarity` and `attributes`. When a crawl returns a new `last_updated_at`, a new row snapshot is inserted.
+- `riven_snapshots` holds one row per observed version of an auction, keyed `(auction_id, updated_at)` on a snapshot of `riven_auctions.updated_at`. Each row snapshots everything that can change: `buyout_price`, `starting_price`, `is_direct_sell`, `re_rolls`, `mod_rank`, `mastery_level`, `polarity` and `attributes`, plus the auction JSON as sent in `raw`, since history can't be refetched. When a crawl returns a new `last_updated_at`, a new row snapshot is inserted.
 
 The last version before removal is the closest proxy for a sale price. As we're likely to miss updates between snapshots, we should prioritize rivens with the most listings. We can tune update frequency once we've crawled all weapons and build the initial database.
 

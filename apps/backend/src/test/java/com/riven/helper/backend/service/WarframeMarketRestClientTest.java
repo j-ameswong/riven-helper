@@ -116,6 +116,18 @@ class WarframeMarketRestClientTest {
 	}
 
 	@Test
+	void readsAuctionsAsRawJson() {
+		server.expect(requestTo(BASE_URL + "/v1/auctions"))
+				.andRespond(withSuccess("""
+						{ "payload": { "auctions": [ { "id": "a", "item": { "type": "lich" } } ] } }
+						""", MediaType.APPLICATION_JSON));
+
+		assertThat(client.getAuctions().payload().auctions()).singleElement()
+				.satisfies(auction -> assertThat(auction.path("item").path("type").asString()).isEqualTo("lich"));
+		server.verify();
+	}
+
+	@Test
 	void waitsForASlotBeforeTheRequest() throws InterruptedException {
 		server.expect(requestTo(BASE_URL + "/v2/versions"))
 				.andRespond(withSuccess("{}", MediaType.APPLICATION_JSON));

@@ -17,3 +17,6 @@ databaseChangeLog:
   - include:
       file: 003-sync-state.yaml
       relativeToChangelogFile: true
+  - include:
+      file: 004-riven-auctions.yaml
+      relativeToChangelogFile: true
