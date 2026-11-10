@@ -7,10 +7,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.riven.helper.backend.domain.RivenAuction;
-import com.riven.helper.backend.dto.RivenAuctionDTO;
+import com.riven.helper.backend.domain.RivenSnapshot;
 import com.riven.helper.backend.repository.RivenAuctionRepository;
-
-import tools.jackson.databind.JsonNode;
 
 /** Owns every write to the riven_auctions table. */
 @Service
@@ -25,22 +23,15 @@ public class RivenAuctionService {
 		this.snapshotService = snapshotService;
 	}
 
-	/**
-	 * Upserts the auction and records this version of it as a snapshot, together.
-	 *
-	 * @param weaponId the id of the weapon {@code dto}'s {@code weapon_url_name} names
-	 * @param raw the auction object as sent, which {@code dto} was read from
-	 */
+	/** Upserts the auction and records {@code snapshot}, a version of it, together. */
 	@Transactional
-	public void archive(RivenAuctionDTO dto, long weaponId, JsonNode raw) {
-		RivenAuction auction = new RivenAuction();
-		auction.setAuctionId(dto.id());
-		auction.setWeaponId(weaponId);
-		auction.setOwnerId(dto.owner().id());
-		auction.setCreatedAt(dto.created());
-		auction.setLastUpdatedAt(dto.updated());
+	public void archive(RivenAuction auction, RivenSnapshot snapshot) {
+		if (!snapshot.getAuctionId().equals(auction.getAuctionId())) {
+			throw new IllegalArgumentException("Snapshot of auction %s doesn't belong to auction %s"
+					.formatted(snapshot.getAuctionId(), auction.getAuctionId()));
+		}
 		auctionRepository.upsert(auction);
-		snapshotService.record(dto, raw);
+		snapshotService.record(snapshot);
 	}
 
 	/** The {@code created_at} of the newest auction archived, if any. */

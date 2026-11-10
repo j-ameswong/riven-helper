@@ -9,11 +9,7 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import com.riven.helper.backend.domain.RivenType;
 import com.riven.helper.backend.domain.Weapon;
-import com.riven.helper.backend.domain.WeaponGroup;
-import com.riven.helper.backend.dto.I18nDTO;
-import com.riven.helper.backend.dto.WeaponDTO;
 import com.riven.helper.backend.repository.WeaponRepository;
 
 /** Owns every write to the weapons table. */
@@ -28,21 +24,15 @@ public class WeaponService {
 
 	/** Inserts new weapons and updates existing ones in place, matched on the API id. */
 	@Transactional
-	public void upsertAll(List<WeaponDTO> dtos) {
+	public void upsertAll(List<Weapon> weapons) {
 		Map<String, Weapon> existing = weaponRepository.findAll().stream()
 				.collect(Collectors.toMap(Weapon::getApiWeaponId, Function.identity()));
-		weaponRepository.saveAll(dtos.stream().map(dto -> {
-			Weapon weapon = existing.getOrDefault(dto.id(), new Weapon());
-			weapon.setApiWeaponId(dto.id());
-			weapon.setSlug(dto.slug());
-			weapon.setGameRef(dto.gameRef());
-			weapon.setWeaponGroup(dto.group());
-			// The API calls archgun rivens rifle; in game they're their own type
-			weapon.setRivenType(dto.group() == WeaponGroup.ARCHGUN ? RivenType.ARCHGUN : dto.rivenType());
-			weapon.setReqMasteryRank((short) dto.reqMasteryRank());
-			weapon.setName(I18nDTO.englishName(dto.i18n(), dto.slug()));
-			return weapon;
-		}).toList());
+		weapons.forEach(weapon -> {
+			Weapon current = existing.get(weapon.getApiWeaponId());
+			// An id makes saveAll merge onto the existing row instead of inserting
+			weapon.setWeaponId(current == null ? null : current.getWeaponId());
+		});
+		weaponRepository.saveAll(weapons);
 	}
 
 	/** Every weapon's id, keyed by its slug (an auction's {@code weapon_url_name}). */

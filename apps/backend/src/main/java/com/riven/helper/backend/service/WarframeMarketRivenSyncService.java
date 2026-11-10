@@ -15,6 +15,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.riven.helper.backend.dto.AttributeDTO;
 import com.riven.helper.backend.dto.WeaponDTO;
+import com.riven.helper.backend.mapper.AttributeMapper;
+import com.riven.helper.backend.mapper.WeaponMapper;
 
 /**
  * Keeps the weapons and attributes tables in step with warframe.market's riven
@@ -33,15 +35,22 @@ public class WarframeMarketRivenSyncService {
 
 	private final AttributeService attributeService;
 
+	private final WeaponMapper weaponMapper;
+
+	private final AttributeMapper attributeMapper;
+
 	private final JdbcClient jdbc;
 
 	private final TransactionTemplate transaction;
 
 	WarframeMarketRivenSyncService(WarframeMarketRestClient client, WeaponService weaponService,
-			AttributeService attributeService, JdbcClient jdbc, TransactionTemplate transaction) {
+			AttributeService attributeService, WeaponMapper weaponMapper, AttributeMapper attributeMapper,
+			JdbcClient jdbc, TransactionTemplate transaction) {
 		this.client = client;
 		this.weaponService = weaponService;
 		this.attributeService = attributeService;
+		this.weaponMapper = weaponMapper;
+		this.attributeMapper = attributeMapper;
 		this.jdbc = jdbc;
 		this.transaction = transaction;
 	}
@@ -77,8 +86,8 @@ public class WarframeMarketRivenSyncService {
 		}
 
 		transaction.executeWithoutResult(status -> {
-			weaponService.upsertAll(weapons);
-			attributeService.upsertAll(attributes);
+			weaponService.upsertAll(weapons.stream().map(weaponMapper::toEntity).toList());
+			attributeService.upsertAll(attributes.stream().map(attributeMapper::toEntity).toList());
 			storeHash(hash);
 		});
 		log.info("Synced riven manifests to {}: {} weapons, {} attributes", hash, weapons.size(), attributes.size());

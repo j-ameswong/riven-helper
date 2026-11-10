@@ -12,8 +12,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import com.riven.helper.backend.domain.RivenAuction;
+import com.riven.helper.backend.domain.RivenSnapshot;
 import com.riven.helper.backend.dto.RivenAuctionDTO;
 import com.riven.helper.backend.dto.V1AuctionsDTO;
+import com.riven.helper.backend.mapper.RivenAuctionMapper;
+import com.riven.helper.backend.mapper.RivenSnapshotMapper;
 
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -32,7 +36,7 @@ public class WarframeMarketAuctionPollService {
 
 	private final WarframeMarketRestClient client;
 
-	private final JsonMapper mapper;
+	private final JsonMapper jsonMapper;
 
 	private final WarframeMarketRivenSyncService syncService;
 
@@ -40,14 +44,21 @@ public class WarframeMarketAuctionPollService {
 
 	private final RivenAuctionService auctionService;
 
-	WarframeMarketAuctionPollService(WarframeMarketRestClient client, JsonMapper mapper,
+	private final RivenAuctionMapper auctionMapper;
+
+	private final RivenSnapshotMapper snapshotMapper;
+
+	WarframeMarketAuctionPollService(WarframeMarketRestClient client, JsonMapper jsonMapper,
 			WarframeMarketRivenSyncService syncService, WeaponService weaponService,
-			RivenAuctionService auctionService) {
+			RivenAuctionService auctionService, RivenAuctionMapper auctionMapper,
+			RivenSnapshotMapper snapshotMapper) {
 		this.client = client;
-		this.mapper = mapper;
+		this.jsonMapper = jsonMapper;
 		this.syncService = syncService;
 		this.weaponService = weaponService;
 		this.auctionService = auctionService;
+		this.auctionMapper = auctionMapper;
+		this.snapshotMapper = snapshotMapper;
 	}
 
 	/**
@@ -58,7 +69,7 @@ public class WarframeMarketAuctionPollService {
 	public record PollResult(int rivens, boolean gap) {
 	}
 
-	private record Riven(RivenAuctionDTO auction, long weaponId, JsonNode raw) {
+	private record Riven(RivenAuction auction, RivenSnapshot snapshot) {
 	}
 
 	@Scheduled(fixedDelay = 1, timeUnit = TimeUnit.MINUTES)
@@ -81,7 +92,7 @@ public class WarframeMarketAuctionPollService {
 			return new PollResult(0, false);
 		}
 
-		OffsetDateTime oldest = rivens.stream().map(r -> r.auction().created())
+		OffsetDateTime oldest = rivens.stream().map(r -> r.auction().getCreatedAt())
 				.min(Comparator.naturalOrder()).orElseThrow();
 		Optional<OffsetDateTime> newestKnown = auctionService.findNewestCreatedAt();
 		boolean gap = newestKnown.filter(oldest::isAfter).isPresent();
@@ -90,7 +101,7 @@ public class WarframeMarketAuctionPollService {
 					newestKnown.get(), oldest);
 		}
 
-		rivens.forEach(riven -> auctionService.archive(riven.auction(), riven.weaponId(), riven.raw()));
+		rivens.forEach(riven -> auctionService.archive(riven.auction(), riven.snapshot()));
 		log.debug("Polled {} riven auctions", rivens.size());
 		return new PollResult(rivens.size(), gap);
 	}
@@ -120,7 +131,7 @@ public class WarframeMarketAuctionPollService {
 	private Optional<Riven> read(JsonNode node, Map<String, Long> weaponIds) {
 		RivenAuctionDTO auction;
 		try {
-			auction = mapper.treeToValue(node, RivenAuctionDTO.class);
+			auction = jsonMapper.treeToValue(node, RivenAuctionDTO.class);
 		}
 		catch (JacksonException ex) {
 			log.warn("Skipping malformed riven auction {}: {}", node.path("id"), ex.getOriginalMessage());
@@ -131,7 +142,8 @@ public class WarframeMarketAuctionPollService {
 			log.warn("Skipping riven auction {}: unknown weapon {}", auction.id(), auction.item().weaponUrlName());
 			return Optional.empty();
 		}
-		return Optional.of(new Riven(auction, weaponId, node));
+		return Optional.of(
+				new Riven(auctionMapper.toEntity(auction, weaponId), snapshotMapper.toEntity(auction, node)));
 	}
 
 }
