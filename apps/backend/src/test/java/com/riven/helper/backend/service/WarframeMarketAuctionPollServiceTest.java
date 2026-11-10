@@ -1,11 +1,15 @@
 package com.riven.helper.backend.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,7 +19,10 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.riven.helper.backend.TestcontainersConfiguration;
+import com.riven.helper.backend.domain.RivenSnapshot;
 import com.riven.helper.backend.dto.V1AuctionsDTO;
+import com.riven.helper.backend.repository.RivenAuctionRepository;
+import com.riven.helper.backend.repository.RivenSnapshotRepository;
 
 import tools.jackson.databind.json.JsonMapper;
 
@@ -30,6 +37,9 @@ class WarframeMarketAuctionPollServiceTest {
 	@MockitoBean
 	WarframeMarketRestClient client;
 
+	@MockitoBean
+	WarframeMarketRivenSyncService syncService;
+
 	@Autowired
 	WarframeMarketAuctionPollService pollService;
 
@@ -39,10 +49,23 @@ class WarframeMarketAuctionPollServiceTest {
 	@Autowired
 	JsonMapper mapper;
 
+	@Autowired
+	RivenAuctionRepository auctionRepository;
+
+	@Autowired
+	RivenSnapshotRepository snapshotRepository;
+
 	@BeforeEach
+	void givenRubico() {
+		insertWeapon("rubico");
+	}
+
+	// After, not before: other test classes delete weapons, which these rows reference
+	@AfterEach
 	void clearTables() {
 		jdbc.sql("DELETE FROM riven_snapshots").update();
 		jdbc.sql("DELETE FROM riven_auctions").update();
+		jdbc.sql("DELETE FROM weapons WHERE slug = 'brand_new_gun'").update();
 	}
 
 	@Test
@@ -53,8 +76,10 @@ class WarframeMarketAuctionPollServiceTest {
 
 		assertThat(pollService.poll()).isEqualTo(new WarframeMarketAuctionPollService.PollResult(1, false));
 
-		assertThat(jdbc.sql("SELECT weapon_slug, owner_id FROM riven_auctions WHERE auction_id = 'a1'")
-				.query().singleRow()).isEqualTo(Map.of("weapon_slug", "rubico", "owner_id", "owner-a1"));
+		assertThat(jdbc.sql("""
+				SELECT w.slug, a.owner_id FROM riven_auctions a JOIN weapons w USING (weapon_id)
+				WHERE a.auction_id = 'a1'
+				""").query().singleRow()).isEqualTo(Map.of("slug", "rubico", "owner_id", "owner-a1"));
 		assertThat(jdbc.sql("""
 				SELECT buyout_price, polarity, attributes->0->>'url_name' AS first_stat, raw->'owner'->>'ingame_name' AS seller
 				FROM riven_snapshots WHERE auction_id = 'a1'
@@ -62,6 +87,27 @@ class WarframeMarketAuctionPollServiceTest {
 				.isEqualTo(Map.of("buyout_price", 200, "polarity", "madurai", "first_stat", "critical_chance",
 						"seller", "Seller"));
 		assertThat(count("riven_auctions")).isOne();
+		verify(syncService, never()).sync(anyBoolean());
+	}
+
+	@Test
+	void entitiesReadBackWhatThePollWrote() {
+		givenFeed(riven("a1", "10:00", "10:05", "200"));
+		pollService.poll();
+
+		assertThat(auctionRepository.findById("a1")).hasValueSatisfying(auction -> {
+			assertThat(auction.getOwnerId()).isEqualTo("owner-a1");
+			assertThat(auction.getCreatedAt()).isEqualTo(time("10:00"));
+			assertThat(auction.getRemovedAt()).isNull();
+		});
+		assertThat(snapshotRepository.findById(new RivenSnapshot.Key("a1", time("10:05")))).hasValueSatisfying(
+				snapshot -> {
+					assertThat(snapshot.getBuyoutPrice()).isEqualTo(200);
+					assertThat(snapshot.isDirectSell()).isFalse();
+					assertThat(snapshot.getMasteryLevel()).isEqualTo((short) 12);
+					assertThat(snapshot.getAttributes()).contains("critical_chance");
+					assertThat(snapshot.getRaw()).contains("\"ingame_name\"");
+				});
 	}
 
 	@Test
@@ -98,6 +144,34 @@ class WarframeMarketAuctionPollServiceTest {
 	}
 
 	@Test
+	void skipsARivenForAWeaponTheSyncDoesNotFind() {
+		givenFeed(riven("a1", "10:00", "10:00", "200"), riven("a2", "10:00", "10:00", "200", "brand_new_gun"));
+
+		assertThat(pollService.poll().rivens()).isOne();
+		assertThat(count("riven_auctions")).isOne();
+		verify(syncService).sync(false);
+	}
+
+	@Test
+	void keepsARivenForAWeaponTheSyncPicksUp() {
+		givenFeed(riven("a1", "10:00", "10:00", "200", "brand_new_gun"));
+		when(syncService.sync(false)).thenAnswer(invocation -> {
+			insertWeapon("brand_new_gun");
+			return null;
+		});
+
+		assertThat(pollService.poll().rivens()).isOne();
+	}
+
+	@Test
+	void skipsTheUnknownRivenWhenTheSyncFails() {
+		givenFeed(riven("a1", "10:00", "10:00", "200"), riven("a2", "10:00", "10:00", "200", "brand_new_gun"));
+		when(syncService.sync(false)).thenThrow(new IllegalStateException("429"));
+
+		assertThat(pollService.poll().rivens()).isOne();
+	}
+
+	@Test
 	void flagsAGapOnlyWhenTheFeedNoLongerOverlapsTheArchive() {
 		givenFeed(riven("a1", "10:00", "10:00", "200"));
 		assertThat(pollService.poll().gap()).isFalse();
@@ -115,6 +189,14 @@ class WarframeMarketAuctionPollServiceTest {
 				""".formatted(String.join(",", auctions)), V1AuctionsDTO.class));
 	}
 
+	private void insertWeapon(String slug) {
+		jdbc.sql("""
+				INSERT INTO weapons (api_weapon_id, slug, game_ref, weapon_group, riven_type, req_mastery_rank, name)
+				VALUES (?, ?, '/Lotus/x', 'primary', 'rifle', 4, ?)
+				ON CONFLICT DO NOTHING
+				""").params("api-" + slug, slug, slug).update();
+	}
+
 	private long count(String table) {
 		return jdbc.sql("SELECT count(*) FROM " + table).query(Long.class).single();
 	}
@@ -124,13 +206,17 @@ class WarframeMarketAuctionPollServiceTest {
 	}
 
 	private static String riven(String id, String created, String updated, String buyout) {
+		return riven(id, created, updated, buyout, "rubico");
+	}
+
+	private static String riven(String id, String created, String updated, String buyout, String weapon) {
 		return """
 				{
 				  "id": "%s", "starting_price": 100, "buyout_price": %s, "top_bid": null, "is_direct_sell": false,
 				  "created": "%s", "updated": "%s", "visible": true,
 				  "owner": { "id": "owner-%s", "ingame_name": "Seller", "status": "offline" },
 				  "item": {
-				    "type": "riven", "weapon_url_name": "rubico", "name": "crita-satisco", "polarity": "madurai",
+				    "type": "riven", "weapon_url_name": "%s", "name": "crita-satisco", "polarity": "madurai",
 				    "mod_rank": 0, "mastery_level": 12, "re_rolls": 3,
 				    "attributes": [
 				      { "url_name": "critical_chance", "value": 120.5, "positive": true },
@@ -138,7 +224,7 @@ class WarframeMarketAuctionPollServiceTest {
 				    ]
 				  }
 				}
-				""".formatted(id, buyout, time(created), time(updated), id);
+				""".formatted(id, buyout, time(created), time(updated), id, weapon);
 	}
 
 }

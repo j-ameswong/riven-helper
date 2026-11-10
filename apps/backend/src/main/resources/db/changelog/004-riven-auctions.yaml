@@ -14,13 +14,13 @@ databaseChangeLog:
                   constraints:
                     primaryKey: true
                     primaryKeyName: pk_riven_auctions
-              # No foreign key to weapons: a new weapon can be listed before
-              # the manifest sync picks it up, and the auction must still be kept.
               - column:
-                  name: weapon_slug
-                  type: text
+                  name: weapon_id
+                  type: bigint
                   constraints:
                     nullable: false
+                    foreignKeyName: fk_riven_auctions_weapon
+                    references: weapons(weapon_id)
               # Sellers relist the same riven under new auction ids
               - column:
                   name: owner_id

@@ -1,18 +1,16 @@
 package com.riven.helper.backend.service;
 
 import java.time.OffsetDateTime;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import com.riven.helper.backend.dto.RivenAuctionDTO;
 import com.riven.helper.backend.dto.V1AuctionsDTO;
@@ -34,18 +32,22 @@ public class WarframeMarketAuctionPollService {
 
 	private final WarframeMarketRestClient client;
 
-	private final JdbcClient jdbc;
-
-	private final TransactionTemplate transaction;
-
 	private final JsonMapper mapper;
 
-	WarframeMarketAuctionPollService(WarframeMarketRestClient client, JdbcClient jdbc,
-			TransactionTemplate transaction, JsonMapper mapper) {
+	private final WarframeMarketRivenSyncService syncService;
+
+	private final WeaponService weaponService;
+
+	private final RivenAuctionService auctionService;
+
+	WarframeMarketAuctionPollService(WarframeMarketRestClient client, JsonMapper mapper,
+			WarframeMarketRivenSyncService syncService, WeaponService weaponService,
+			RivenAuctionService auctionService) {
 		this.client = client;
-		this.jdbc = jdbc;
-		this.transaction = transaction;
 		this.mapper = mapper;
+		this.syncService = syncService;
+		this.weaponService = weaponService;
+		this.auctionService = auctionService;
 	}
 
 	/**
@@ -56,7 +58,7 @@ public class WarframeMarketAuctionPollService {
 	public record PollResult(int rivens, boolean gap) {
 	}
 
-	private record Riven(RivenAuctionDTO auction, JsonNode raw) {
+	private record Riven(RivenAuctionDTO auction, long weaponId, JsonNode raw) {
 	}
 
 	@Scheduled(fixedDelay = 1, timeUnit = TimeUnit.MINUTES)
@@ -69,10 +71,11 @@ public class WarframeMarketAuctionPollService {
 		if (response == null) {
 			throw new IllegalStateException("warframe.market returned an empty body for /v1/auctions");
 		}
-		List<Riven> rivens = response.payload().auctions().stream()
+		List<JsonNode> rivenNodes = response.payload().auctions().stream()
 				.filter(node -> "riven".equals(node.path("item").path("type").asString()))
-				.flatMap(node -> read(node).stream())
 				.toList();
+		Map<String, Long> weaponIds = weaponIds(rivenNodes);
+		List<Riven> rivens = rivenNodes.stream().flatMap(node -> read(node, weaponIds).stream()).toList();
 		if (rivens.isEmpty()) {
 			log.warn("/v1/auctions returned no riven auctions");
 			return new PollResult(0, false);
@@ -80,52 +83,55 @@ public class WarframeMarketAuctionPollService {
 
 		OffsetDateTime oldest = rivens.stream().map(r -> r.auction().created())
 				.min(Comparator.naturalOrder()).orElseThrow();
-		Optional<OffsetDateTime> newestKnown = jdbc.sql("SELECT max(created_at) FROM riven_auctions")
-				.query(OffsetDateTime.class).optional();
+		Optional<OffsetDateTime> newestKnown = auctionService.findNewestCreatedAt();
 		boolean gap = newestKnown.filter(oldest::isAfter).isPresent();
 		if (gap) {
 			log.warn("Possible gap in the riven archive: auctions created between {} and {} were missed",
-					oldest, newestKnown.get());
+					newestKnown.get(), oldest);
 		}
 
-		transaction.executeWithoutResult(status -> rivens.forEach(this::save));
+		rivens.forEach(riven -> auctionService.archive(riven.auction(), riven.weaponId(), riven.raw()));
 		log.debug("Polled {} riven auctions", rivens.size());
 		return new PollResult(rivens.size(), gap);
 	}
 
-	// Skip and return empty if a node is malformed
-	private Optional<Riven> read(JsonNode node) {
+	// A weapon newer than the hourly manifest sync would otherwise lose its first
+	// listings for good, as they only stay in the feed for ~10 minutes
+	private Map<String, Long> weaponIds(List<JsonNode> rivenNodes) {
+		Map<String, Long> weaponIds = weaponService.findIdsBySlug();
+		if (rivenNodes.stream().allMatch(node -> weaponIds.containsKey(weaponSlug(node)))) {
+			return weaponIds;
+		}
 		try {
-			return Optional.of(new Riven(mapper.treeToValue(node, RivenAuctionDTO.class), node));
+			syncService.sync(false);
+		}
+		catch (RuntimeException ex) {
+			log.warn("Manifest sync for unknown weapons failed", ex);
+			return weaponIds;
+		}
+		return weaponService.findIdsBySlug();
+	}
+
+	private static String weaponSlug(JsonNode node) {
+		return node.path("item").path("weapon_url_name").asString();
+	}
+
+	// Skip and return empty if a node is malformed or its weapon isn't synced
+	private Optional<Riven> read(JsonNode node, Map<String, Long> weaponIds) {
+		RivenAuctionDTO auction;
+		try {
+			auction = mapper.treeToValue(node, RivenAuctionDTO.class);
 		}
 		catch (JacksonException ex) {
 			log.warn("Skipping malformed riven auction {}: {}", node.path("id"), ex.getOriginalMessage());
 			return Optional.empty();
 		}
-	}
-
-	private void save(Riven riven) {
-		RivenAuctionDTO auction = riven.auction();
-		RivenAuctionDTO.Item item = auction.item();
-		jdbc.sql("""
-				INSERT INTO riven_auctions (auction_id, weapon_slug, owner_id, created_at, last_updated_at)
-				VALUES (?, ?, ?, ?, ?)
-				ON CONFLICT (auction_id) DO UPDATE
-				SET last_updated_at = GREATEST(riven_auctions.last_updated_at, excluded.last_updated_at)
-				""")
-				.params(auction.id(), item.weaponUrlName(), auction.owner().id(), auction.created(), auction.updated())
-				.update();
-		jdbc.sql("""
-				INSERT INTO riven_snapshots (auction_id, updated_at, starting_price, buyout_price, is_direct_sell,
-					re_rolls, mod_rank, mastery_level, polarity, attributes, raw)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb)
-				ON CONFLICT (auction_id, updated_at) DO NOTHING
-				""")
-				// Arrays.asList as NullAway rejects nullable vararg buyoutPrice
-				.params(Arrays.asList(auction.id(), auction.updated(), auction.startingPrice(), auction.buyoutPrice(),
-						auction.isDirectSell(), item.reRolls(), item.modRank(), item.masteryLevel(), item.polarity(),
-						riven.raw().path("item").path("attributes").toString(), riven.raw().toString()))
-				.update();
+		Long weaponId = weaponIds.get(auction.item().weaponUrlName());
+		if (weaponId == null) {
+			log.warn("Skipping riven auction {}: unknown weapon {}", auction.id(), auction.item().weaponUrlName());
+			return Optional.empty();
+		}
+		return Optional.of(new Riven(auction, weaponId, node));
 	}
 
 }

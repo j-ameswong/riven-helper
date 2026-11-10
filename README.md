@@ -39,7 +39,7 @@ There will be 2 parts to this,
 
 Nothing is hard-deleted, and each price a seller sets is kept as its own row, because it represents a pricing decision made based on the market at that time:
 
-- `riven_auctions` holds identity and lifecycle, one row per auction `id`: `weapon_slug` (no foreign key, so a weapon newer than the manifest sync is still kept), `owner_id` (to spot relists), `created_at`, `last_updated_at` and a nullable `removed_at` as the soft delete. Set `removed_at` when a complete crawl of the weapon no longer returns the auction. The latest version is the snapshot with the newest `updated_at`.
+- `riven_auctions` holds identity and lifecycle, one row per auction `id`: `weapon_id` (an auction for a weapon the manifest sync hasn't picked up yet is skipped), `owner_id` (to spot relists), `created_at`, `last_updated_at` and a nullable `removed_at` as the soft delete. Set `removed_at` when a complete crawl of the weapon no longer returns the auction. The latest version is the snapshot with the newest `updated_at`.
   > Note: there's no way to tell between auction cancellations and sales
 - `riven_snapshots` holds one row per observed version of an auction, keyed `(auction_id, updated_at)` on a snapshot of `riven_auctions.updated_at`. Each row snapshots everything that can change: `buyout_price`, `starting_price`, `is_direct_sell`, `re_rolls`, `mod_rank`, `mastery_level`, `polarity` and `attributes`, plus the auction JSON as sent in `raw`, since history can't be refetched. When a crawl returns a new `last_updated_at`, a new row snapshot is inserted.
 

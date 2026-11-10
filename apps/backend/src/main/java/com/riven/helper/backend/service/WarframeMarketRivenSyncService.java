@@ -3,11 +3,8 @@ package com.riven.helper.backend.service;
 import static com.riven.helper.backend.dto.V2ResponseDTO.requireData;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,15 +13,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import com.riven.helper.backend.domain.Attribute;
-import com.riven.helper.backend.domain.RivenType;
-import com.riven.helper.backend.domain.Weapon;
-import com.riven.helper.backend.domain.WeaponGroup;
 import com.riven.helper.backend.dto.AttributeDTO;
-import com.riven.helper.backend.dto.I18nDTO;
 import com.riven.helper.backend.dto.WeaponDTO;
-import com.riven.helper.backend.repository.AttributeRepository;
-import com.riven.helper.backend.repository.WeaponRepository;
 
 /**
  * Keeps the weapons and attributes tables in step with warframe.market's riven
@@ -39,19 +29,19 @@ public class WarframeMarketRivenSyncService {
 
 	private final WarframeMarketRestClient client;
 
-	private final WeaponRepository weaponRepository;
+	private final WeaponService weaponService;
 
-	private final AttributeRepository attributeRepository;
+	private final AttributeService attributeService;
 
 	private final JdbcClient jdbc;
 
 	private final TransactionTemplate transaction;
 
-	WarframeMarketRivenSyncService(WarframeMarketRestClient client, WeaponRepository weaponRepository,
-			AttributeRepository attributeRepository, JdbcClient jdbc, TransactionTemplate transaction) {
+	WarframeMarketRivenSyncService(WarframeMarketRestClient client, WeaponService weaponService,
+			AttributeService attributeService, JdbcClient jdbc, TransactionTemplate transaction) {
 		this.client = client;
-		this.weaponRepository = weaponRepository;
-		this.attributeRepository = attributeRepository;
+		this.weaponService = weaponService;
+		this.attributeService = attributeService;
 		this.jdbc = jdbc;
 		this.transaction = transaction;
 	}
@@ -87,50 +77,12 @@ public class WarframeMarketRivenSyncService {
 		}
 
 		transaction.executeWithoutResult(status -> {
-			upsertWeapons(weapons);
-			upsertAttributes(attributes);
+			weaponService.upsertAll(weapons);
+			attributeService.upsertAll(attributes);
 			storeHash(hash);
 		});
 		log.info("Synced riven manifests to {}: {} weapons, {} attributes", hash, weapons.size(), attributes.size());
 		return new SyncResult(hash, true);
-	}
-
-	private void upsertWeapons(List<WeaponDTO> dtos) {
-		Map<String, Weapon> existing = weaponRepository.findAll().stream()
-				.collect(Collectors.toMap(Weapon::getApiWeaponId, Function.identity()));
-		weaponRepository.saveAll(dtos.stream().map(dto -> {
-			Weapon weapon = existing.getOrDefault(dto.id(), new Weapon());
-			weapon.setApiWeaponId(dto.id());
-			weapon.setSlug(dto.slug());
-			weapon.setGameRef(dto.gameRef());
-			weapon.setWeaponGroup(dto.group());
-			// The API calls archgun rivens rifle; in game they're their own type
-			weapon.setRivenType(dto.group() == WeaponGroup.ARCHGUN ? RivenType.ARCHGUN : dto.rivenType());
-			weapon.setReqMasteryRank((short) dto.reqMasteryRank());
-			weapon.setName(englishName(dto.i18n(), dto.slug()));
-			return weapon;
-		}).toList());
-	}
-
-	private void upsertAttributes(List<AttributeDTO> dtos) {
-		Map<String, Attribute> existing = attributeRepository.findAll().stream()
-				.collect(Collectors.toMap(Attribute::getApiAttributeId, Function.identity()));
-		attributeRepository.saveAll(dtos.stream().map(dto -> {
-			Attribute attribute = existing.getOrDefault(dto.id(), new Attribute());
-			attribute.setApiAttributeId(dto.id());
-			attribute.setSlug(dto.slug());
-			attribute.setGameRef(dto.gameRef());
-			attribute.setAttributeGroup(dto.group());
-			attribute.setPrefix(dto.prefix());
-			attribute.setSuffix(dto.suffix());
-			attribute.setUnit(dto.unit());
-			attribute.setName(englishName(dto.i18n(), dto.slug()));
-			attribute.setExclusiveTo(dto.exclusiveTo());
-			attribute.setPositiveOnly(dto.positiveOnly());
-			attribute.setNegativeOnly(dto.negativeOnly());
-			attribute.setPositiveIsNegative(dto.positiveIsNegative());
-			return attribute;
-		}).toList());
 	}
 
 	private Optional<String> storedHash() {
@@ -142,14 +94,6 @@ public class WarframeMarketRivenSyncService {
 				INSERT INTO sync_state (name, value, updated_at) VALUES (?, ?, now())
 				ON CONFLICT (name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
 				""").params(RIVENS, hash).update();
-	}
-
-	private static String englishName(Map<String, I18nDTO> i18n, String slug) {
-		I18nDTO english = i18n.get("en");
-		if (english == null) {
-			throw new IllegalStateException("No English name for " + slug);
-		}
-		return english.name();
 	}
 
 }
