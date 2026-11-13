@@ -18,19 +18,19 @@ Prefer current, actively developed approaches over older conventions, even when 
 
 ## Useful Commands
 
-Java 25 (see `.sdkmanrc`; `sdk env` picks it up). Backend commands run from `apps/backend`.
+direnv loads the toolchain (Java 25) from `devenv.nix`; outside direnv, run commands through `nix develop --no-pure-eval -c <cmd>`. Backend commands run from `apps/backend`.
 
 ```sh
 docker compose up -d                       # Postgres and Redis, from the repo root
-./mvnw spring-boot:run                     # run the backend on :8080; syncs riven manifests at startup
+./mvnw spring-boot:run                     # run the backend on :${SERVER_PORT:-8080}; syncs riven manifests at startup
 ./mvnw test                                # all tests; needs Docker for Testcontainers
 ./mvnw test -Dtest=WarframeMarketRivenSyncServiceTest   # one test class
 ./mvnw compile                             # includes the NullAway check
-curl -X POST 'localhost:8080/api/manifests/rivens/sync?force=true'   # force a manifest re-sync
-curl localhost:8080/actuator/health        # UP/DOWN with Postgres, Redis and disk space details
+curl -X POST "localhost:${SERVER_PORT:-8080}/api/manifests/rivens/sync?force=true"   # force a manifest re-sync
+curl "localhost:${SERVER_PORT:-8080}/actuator/health"   # UP/DOWN with Postgres, Redis and disk space details
 ```
 
-Connection settings default to the compose services and can be overridden with `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `REDIS_HOST` and `REDIS_PORT`.
+Connection settings default to the compose services and can be overridden with `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `REDIS_HOST` and `REDIS_PORT`. A gitignored `.env.local` holds per-machine overrides; on homelab-pro it sets `SERVER_PORT`, because llama-swap holds :8080 there.
 
 ---
 
