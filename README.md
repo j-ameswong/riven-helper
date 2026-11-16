@@ -2,7 +2,7 @@
 
 This project is intended to be a single-user, self hosted warframe.market api wrapper specifically for browsing riven mods and watchlisting certain trends to receive notifications through ntfy.sh. It also offers static resources including a riven grade calculator with OCR/manual input/warframe.market auction link, stat range lookups, and available riven attributes for different weapon categories.
 
-Currently in early stages: riven manifests sync, and new riven auctions are archived from `/v1/auctions` every minute.
+Currently in early stages: riven manifests sync, new riven auctions are archived from `/v1/auctions` every minute, and every weapon's listings are crawled in turn from `/v1/auctions/search` (see [the crawl plan](docs/riven-crawl.md)).
 
 ## Planned features (tentative)
 

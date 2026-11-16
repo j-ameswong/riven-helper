@@ -29,11 +29,13 @@ class WarframeMarketClientConfiguration {
 	private static final Duration READ_TIMEOUT = Duration.ofSeconds(30);
 
 	@Bean
-	WarframeMarketRestClient warframeMarketRestClient(RedisRateLimiter generalRateLimiter) {
-		return client(restClient(generalRateLimiter));
+	WarframeMarketRestClient warframeMarketRestClient(RedisRateLimiter generalRateLimiter,
+			RedisRateLimiter auctionSearchRateLimiter) {
+		return client(restClient(generalRateLimiter, auctionSearchRateLimiter));
 	}
 
-	static RestClient.Builder restClient(RedisRateLimiter generalRateLimiter) {
+	static RestClient.Builder restClient(RedisRateLimiter generalRateLimiter,
+			RedisRateLimiter auctionSearchRateLimiter) {
 		HttpClient httpClient = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
 		JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
 		requestFactory.setReadTimeout(READ_TIMEOUT);
@@ -44,7 +46,7 @@ class WarframeMarketClientConfiguration {
 				.defaultHeader(HttpHeaders.USER_AGENT, USER_AGENT)
 				.defaultHeader("Platform", "pc")
 				.defaultHeader("Language", "en")
-				.requestInterceptor(new RateLimitInterceptor(generalRateLimiter));
+				.requestInterceptor(new RateLimitInterceptor(generalRateLimiter, auctionSearchRateLimiter));
 	}
 
 	static WarframeMarketRestClient client(RestClient.Builder restClient) {

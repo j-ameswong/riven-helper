@@ -1,0 +1,25 @@
+# State for the per-weapon riven crawl. See docs/riven-crawl.md.
+databaseChangeLog:
+  - changeSet:
+      id: 005-add-weapons-last-crawled-at
+      author: Cheng An Wong
+      changes:
+        # NULL until the weapon's first crawl. Not mapped on the Weapon entity,
+        # because the manifest sync saves fresh entities and would reset it.
+        - addColumn:
+            tableName: weapons
+            columns:
+              - column:
+                  name: last_crawled_at
+                  type: timestamptz
+
+  - changeSet:
+      id: 005-index-riven-auctions-weapon
+      author: Cheng An Wong
+      changes:
+        - createIndex:
+            tableName: riven_auctions
+            indexName: ix_riven_auctions_weapon_id
+            columns:
+              - column:
+                  name: weapon_id

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -15,11 +16,13 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.InOrder;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -45,13 +48,15 @@ class WarframeMarketRestClientTest {
 
 	private final RedisRateLimiter limiter = mock(RedisRateLimiter.class);
 
+	private final RedisRateLimiter searchLimiter = mock(RedisRateLimiter.class);
+
 	private MockRestServiceServer server;
 
 	private WarframeMarketRestClient client;
 
 	@BeforeEach
 	void setUp() {
-		RestClient.Builder restClient = WarframeMarketClientConfiguration.restClient(limiter);
+		RestClient.Builder restClient = WarframeMarketClientConfiguration.restClient(limiter, searchLimiter);
 		server = MockRestServiceServer.bindTo(restClient).build();
 		client = WarframeMarketClientConfiguration.client(restClient);
 	}
@@ -136,7 +141,35 @@ class WarframeMarketRestClientTest {
 
 		verify(limiter).acquire();
 		verify(limiter, never()).pause(any());
+		verify(searchLimiter, never()).acquire();
 		server.verify();
+	}
+
+	@Test
+	void searchesRivenAuctionsWithTheFiltersUnderBothLimiters() throws InterruptedException {
+		server.expect(requestTo(BASE_URL + "/v1/auctions/search?type=riven&weapon_url_name=rubico"))
+				.andRespond(withSuccess("""
+						{ "payload": { "auctions": [ { "id": "a" } ] } }
+						""", MediaType.APPLICATION_JSON));
+
+		assertThat(client.searchRivenAuctions(Map.of("weapon_url_name", "rubico")).payload().auctions()).hasSize(1);
+
+		InOrder order = inOrder(searchLimiter, limiter);
+		order.verify(searchLimiter).acquire();
+		order.verify(limiter).acquire();
+		server.verify();
+	}
+
+	@Test
+	void pausesOnlySearchesOnASearch429() {
+		server.expect(requestTo(BASE_URL + "/v1/auctions/search?type=riven&weapon_url_name=rubico"))
+				.andRespond(withStatus(HttpStatus.TOO_MANY_REQUESTS).header(HttpHeaders.RETRY_AFTER, "120"));
+
+		assertThatThrownBy(() -> client.searchRivenAuctions(Map.of("weapon_url_name", "rubico")))
+				.isInstanceOf(HttpClientErrorException.TooManyRequests.class);
+
+		verify(searchLimiter).pause(Duration.ofSeconds(120));
+		verify(limiter, never()).pause(any());
 	}
 
 	@Test
