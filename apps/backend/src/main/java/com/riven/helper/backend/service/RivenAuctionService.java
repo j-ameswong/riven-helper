@@ -1,6 +1,7 @@
 package com.riven.helper.backend.service;
 
 import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
@@ -32,6 +33,15 @@ public class RivenAuctionService {
 		}
 		auctionRepository.upsert(auction);
 		snapshotService.record(snapshot);
+	}
+
+	/**
+	 * Marks the weapon's auctions missing from a complete crawl as removed, see
+	 * {@link RivenAuctionRepository#markRemoved}.
+	 */
+	@Transactional
+	public int markRemoved(long weaponId, Collection<String> seen, OffsetDateTime crawlStartedAt) {
+		return auctionRepository.markRemoved(weaponId, seen, crawlStartedAt);
 	}
 
 	/** The {@code created_at} of the newest auction archived, if any. */

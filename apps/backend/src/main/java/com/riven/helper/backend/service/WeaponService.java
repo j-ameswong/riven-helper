@@ -3,6 +3,7 @@ package com.riven.helper.backend.service;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -33,6 +34,18 @@ public class WeaponService {
 			weapon.setWeaponId(current == null ? null : current.getWeaponId());
 		});
 		weaponRepository.saveAll(weapons);
+	}
+
+	/** The weapon whose riven crawl is most overdue, never-crawled weapons first. */
+	@Transactional(readOnly = true)
+	public Optional<Weapon> findNextToCrawl() {
+		return weaponRepository.findNextToCrawl();
+	}
+
+	/** Sends the weapon to the back of the crawl queue. */
+	@Transactional
+	public void markCrawled(long weaponId) {
+		weaponRepository.markCrawled(weaponId);
 	}
 
 	/** Every weapon's id, keyed by its slug (an auction's {@code weapon_url_name}). */

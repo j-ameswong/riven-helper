@@ -17,23 +17,35 @@ import com.riven.helper.backend.ratelimit.RedisRateLimiter;
  * Waits for a rate limit slot before every request, and holds back later
  * requests after a {@code 429}. The {@code 429} itself is returned as usual, so
  * the caller sees an exception and decides whether to try again.
+ *
+ * <p>An auction search also waits on its own, stricter limiter first, and its
+ * {@code 429} holds back only other searches.
  */
 class RateLimitInterceptor implements ClientHttpRequestInterceptor {
 
 	// The value auction search sends; used when a 429 has no usable Retry-After
 	private static final Duration DEFAULT_RETRY_AFTER = Duration.ofSeconds(120);
 
-	private final RedisRateLimiter limiter;
+	private static final String AUCTION_SEARCH_PATH = "/v1/auctions/search";
 
-	RateLimitInterceptor(RedisRateLimiter limiter) {
-		this.limiter = limiter;
+	private final RedisRateLimiter general;
+
+	private final RedisRateLimiter auctionSearch;
+
+	RateLimitInterceptor(RedisRateLimiter general, RedisRateLimiter auctionSearch) {
+		this.general = general;
+		this.auctionSearch = auctionSearch;
 	}
 
 	@Override
 	public ClientHttpResponse intercept(HttpRequest request, byte[] body, ClientHttpRequestExecution execution)
 			throws IOException {
+		boolean search = AUCTION_SEARCH_PATH.equals(request.getURI().getPath());
 		try {
-			limiter.acquire();
+			if (search) {
+				auctionSearch.acquire();
+			}
+			general.acquire();
 		}
 		catch (InterruptedException ex) {
 			Thread.currentThread().interrupt();
@@ -41,7 +53,7 @@ class RateLimitInterceptor implements ClientHttpRequestInterceptor {
 		}
 		ClientHttpResponse response = execution.execute(request, body);
 		if (response.getStatusCode().isSameCodeAs(HttpStatus.TOO_MANY_REQUESTS)) {
-			limiter.pause(retryAfter(response.getHeaders()));
+			(search ? auctionSearch : general).pause(retryAfter(response.getHeaders()));
 		}
 		return response;
 	}

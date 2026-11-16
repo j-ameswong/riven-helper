@@ -1,9 +1,11 @@
 package com.riven.helper.backend.service;
 
 import java.util.List;
+import java.util.Map;
 
 import org.jspecify.annotations.Nullable;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.service.annotation.GetExchange;
 import org.springframework.web.service.annotation.HttpExchange;
 
@@ -36,5 +38,12 @@ interface WarframeMarketRestClient {
 	/** The 100 most recently created auctions of every type, newest first. */
 	@GetExchange("/v1/auctions")
 	@Nullable V1AuctionsDTO getAuctions();
+
+	/**
+	 * At most 100 riven auctions matching {@code filters}, which need a
+	 * {@code weapon_url_name}. Subject to the much stricter auction search limit.
+	 */
+	@GetExchange("/v1/auctions/search?type=riven")
+	@Nullable V1AuctionsDTO searchRivenAuctions(@RequestParam Map<String, String> filters);
 
 }
