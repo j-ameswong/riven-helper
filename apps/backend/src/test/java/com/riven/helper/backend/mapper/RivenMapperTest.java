@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.OffsetDateTime;
 
 import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 
 import com.riven.helper.backend.domain.RivenAuction;
 import com.riven.helper.backend.domain.RivenSnapshot;
@@ -33,7 +34,7 @@ class RivenMapperTest {
 
 	@Test
 	void mapsTheAuctionWithTheResolvedWeaponId() {
-		RivenAuction auction = new RivenAuctionMapper().toEntity(DTO, 42);
+		RivenAuction auction = Mappers.getMapper(RivenAuctionMapper.class).toEntity(DTO, 42);
 
 		assertThat(auction.getAuctionId()).isEqualTo("a1");
 		assertThat(auction.getWeaponId()).isEqualTo(42);
@@ -45,7 +46,7 @@ class RivenMapperTest {
 
 	@Test
 	void mapsTheSnapshotKeepingTheRawJson() {
-		RivenSnapshot snapshot = new RivenSnapshotMapper().toEntity(DTO, RAW);
+		RivenSnapshot snapshot = Mappers.getMapper(RivenSnapshotMapper.class).toEntity(DTO, RAW);
 
 		assertThat(snapshot.getAuctionId()).isEqualTo("a1");
 		assertThat(snapshot.getUpdatedAt()).isEqualTo(OffsetDateTime.parse("2026-11-10T10:05:00Z"));

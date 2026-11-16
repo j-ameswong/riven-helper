@@ -30,6 +30,7 @@
 		<java.version>25</java.version>
 		<error-prone.version>2.51.0</error-prone.version>
 		<nullaway.version>0.14.3</nullaway.version>
+		<mapstruct.version>1.6.3</mapstruct.version>
 	</properties>
 	<dependencies>
 		<dependency>
@@ -51,6 +52,11 @@
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-data-redis</artifactId>
+		</dependency>
+		<dependency>
+			<groupId>org.mapstruct</groupId>
+			<artifactId>mapstruct</artifactId>
+			<version>${mapstruct.version}</version>
 		</dependency>
 		<dependency>
 			<groupId>org.postgresql</groupId>
@@ -97,7 +103,8 @@
 				<artifactId>spring-boot-maven-plugin</artifactId>
 			</plugin>
 			<!-- NullAway fails the build on unchecked nulls in @NullMarked packages.
-			     Main code only; javac needs the exports in .mvn/jvm.config. -->
+			     Main code only; javac needs the exports in .mvn/jvm.config. Generated code
+			     (the MapStruct mappers) is exempt, as it null-checks its non-null arguments. -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
@@ -108,7 +115,7 @@
 							<compilerArgs combine.children="append">
 								<arg>-XDcompilePolicy=simple</arg>
 								<arg>--should-stop=ifError=FLOW</arg>
-								<arg>-Xplugin:ErrorProne -XepDisableAllChecks -Xep:NullAway:ERROR -XepOpt:NullAway:OnlyNullMarked=true -XepOpt:NullAway:JSpecifyMode=true -XepOpt:NullAway:ExcludedClassAnnotations=jakarta.persistence.Entity</arg>
+								<arg>-Xplugin:ErrorProne -XepDisableAllChecks -Xep:NullAway:ERROR -XepOpt:NullAway:OnlyNullMarked=true -XepOpt:NullAway:JSpecifyMode=true -XepOpt:NullAway:ExcludedClassAnnotations=jakarta.persistence.Entity -XepOpt:NullAway:TreatGeneratedAsUnannotated=true</arg>
 							</compilerArgs>
 							<annotationProcessorPaths>
 								<path>
@@ -120,6 +127,11 @@
 									<groupId>com.uber.nullaway</groupId>
 									<artifactId>nullaway</artifactId>
 									<version>${nullaway.version}</version>
+								</path>
+								<path>
+									<groupId>org.mapstruct</groupId>
+									<artifactId>mapstruct-processor</artifactId>
+									<version>${mapstruct.version}</version>
 								</path>
 							</annotationProcessorPaths>
 						</configuration>

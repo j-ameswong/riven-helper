@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
 
 import com.riven.helper.backend.domain.Attribute;
 import com.riven.helper.backend.domain.AttributeGroup;
@@ -20,9 +21,9 @@ import com.riven.helper.backend.dto.WeaponDTO;
 
 class ManifestMapperTest {
 
-	private final WeaponMapper weaponMapper = new WeaponMapper();
+	private final WeaponMapper weaponMapper = Mappers.getMapper(WeaponMapper.class);
 
-	private final AttributeMapper attributeMapper = new AttributeMapper();
+	private final AttributeMapper attributeMapper = Mappers.getMapper(AttributeMapper.class);
 
 	@Test
 	void mapsAWeaponWithItsEnglishName() {
