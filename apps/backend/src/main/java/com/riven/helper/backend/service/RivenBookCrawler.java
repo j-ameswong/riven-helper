@@ -25,7 +25,11 @@ final class RivenBookCrawler {
 
 	// Tried in this order. Every riven matches exactly one value of each split.
 	private static final List<List<Map<String, String>>> SPLITS = List.of(
-			IntStream.rangeClosed(8, 16).mapToObj(rank -> range("mastery_rank", rank, rank)).toList(),
+			// Open-ended, as sellers can list a mastery level the game doesn't have, e.g. 7
+			Stream.of(Stream.of(Map.of("mastery_rank_max", "8")),
+					IntStream.rangeClosed(9, 15).mapToObj(rank -> range("mastery_rank", rank, rank)),
+					Stream.of(Map.of("mastery_rank_min", "16")))
+					.flatMap(Function.identity()).toList(),
 			Stream.of("madurai", "vazarin", "naramon").map(polarity -> Map.of("polarity", polarity)).toList(),
 			List.of(range("re_rolls", 0, 0), range("re_rolls", 1, 3),
 					range("re_rolls", 4, 10), range("re_rolls", 11, 25),

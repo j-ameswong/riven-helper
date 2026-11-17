@@ -42,9 +42,12 @@ A bucket is a set of search filters. To read one:
 
 | Order | Filter | Values |
 | --- | --- | --- |
-| 1 | `mastery_rank_min` = `mastery_rank_max` | `8` to `16` |
+| 1 | `mastery_rank_min`, `mastery_rank_max` | `≤8`, then `9` to `15` one each, then `16+` |
 | 2 | `polarity` | `madurai`, `vazarin`, `naramon` |
 | 3 | `re_rolls_min`, `re_rolls_max` | `0`, `1–3`, `4–10`, `11–25`, `26–60`, `61–150`, `151+` |
+
+The mastery rank buckets are open-ended at both ends. Rivens in the game run from 8 to 16, but sellers
+enter the level themselves, and some listings have 7.
 
 A bucket that still overflows after all three splits holds more than ~200 listings with the same
 mastery rank, polarity and re-roll band. Its two pages are kept, the rest is missed, and the crawl

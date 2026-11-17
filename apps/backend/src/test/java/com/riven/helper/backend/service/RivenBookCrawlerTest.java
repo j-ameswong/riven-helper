@@ -79,6 +79,17 @@ class RivenBookCrawlerTest {
 	}
 
 	@Test
+	void readsMasteryLevelsTheGameDoesNotHave() {
+		// Mid-priced, so only the mastery rank split can reach them
+		givenRandomBook(300);
+		add(7, POLARITIES[0], 0, 1000);
+		add(17, POLARITIES[0], 0, 1000);
+
+		assertThat(crawl()).isTrue();
+		assertThat(seen).hasSize(302);
+	}
+
+	@Test
 	void reportsABucketNoSplitCanSeparate() {
 		for (int i = 0; i < 250; i++) {
 			add(12, POLARITIES[0], 0, 100);
