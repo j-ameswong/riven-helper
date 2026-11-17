@@ -13,6 +13,8 @@ import java.util.Set;
 import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
 
+import com.riven.helper.backend.repository.ListingCount;
+
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -100,8 +102,45 @@ class RivenBookCrawlerTest {
 		assertThat(seen).hasSizeGreaterThanOrEqualTo(50);
 	}
 
+	@Test
+	void readsAPlannedBookInFewerRequests() {
+		givenRandomBook(3000);
+		crawl();
+		int unplanned = requests;
+		seen.clear();
+		requests = 0;
+
+		assertThat(crawl(RivenBookPlanner.plan(counts()))).isTrue();
+		assertThat(seen).hasSize(3000);
+		assertThat(requests).isLessThan(unplanned).isLessThanOrEqualTo(3000 / 75);
+	}
+
+	@Test
+	void splitsAPlannedBucketThatGrew() {
+		givenRandomBook(3000);
+		List<RivenBucket> plan = RivenBookPlanner.plan(counts());
+		for (int i = 0; i < 200; i++) {
+			add(12, POLARITIES[i % 3], 50 + i % 10, 1000);
+		}
+
+		assertThat(crawl(plan)).isTrue();
+		assertThat(seen).hasSize(3200);
+	}
+
 	private boolean crawl() {
-		return RivenBookCrawler.crawl(Map.of("weapon_url_name", "rubico"), this::search);
+		return crawl(List.of(RivenBucket.ALL));
+	}
+
+	private boolean crawl(List<RivenBucket> plan) {
+		return RivenBookCrawler.crawl(Map.of("weapon_url_name", "rubico"), plan, this::search);
+	}
+
+	// One count per auction, as the planner sums them whether grouped or not
+	private List<ListingCount> counts() {
+		return book.stream()
+				.map(a -> new ListingCount((short) a.path("item").path("mastery_level").asInt(),
+						a.path("item").path("re_rolls").asInt(), a.path("item").path("polarity").asString(), 1))
+				.toList();
 	}
 
 	private List<JsonNode> search(Map<String, String> params) {

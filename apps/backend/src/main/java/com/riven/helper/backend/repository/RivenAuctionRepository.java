@@ -2,6 +2,7 @@ package com.riven.helper.backend.repository;
 
 import java.time.OffsetDateTime;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.Modifying;
@@ -51,5 +52,14 @@ public interface RivenAuctionRepository extends Repository<RivenAuction, String>
 
 	@Query("SELECT max(a.createdAt) FROM RivenAuction a")
 	Optional<OffsetDateTime> findNewestCreatedAt();
+
+	/** Counts the weapon's live auctions by the attributes of their latest snapshot. */
+	@Query("""
+			SELECT new com.riven.helper.backend.repository.ListingCount(s.masteryLevel, s.reRolls, s.polarity, count(a))
+			FROM RivenAuction a JOIN RivenSnapshot s ON s.auctionId = a.auctionId AND s.updatedAt = a.lastUpdatedAt
+			WHERE a.weaponId = :weaponId AND a.removedAt IS NULL
+			GROUP BY s.masteryLevel, s.reRolls, s.polarity
+			""")
+	List<ListingCount> countLive(@Param("weaponId") long weaponId);
 
 }
