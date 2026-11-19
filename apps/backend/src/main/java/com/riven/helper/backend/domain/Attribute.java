@@ -59,6 +59,92 @@ public class Attribute {
 	// A positive number is the bad side, e.g. recoil.
 	private boolean positiveIsNegative;
 
+	// For JPA
+	protected Attribute() {
+	}
+
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	public static final class Builder {
+
+		private final Attribute attribute = new Attribute();
+
+		private Builder() {
+		}
+
+		public Builder attributeId(@Nullable Long attributeId) {
+			attribute.attributeId = attributeId;
+			return this;
+		}
+
+		public Builder apiAttributeId(String apiAttributeId) {
+			attribute.apiAttributeId = apiAttributeId;
+			return this;
+		}
+
+		public Builder slug(String slug) {
+			attribute.slug = slug;
+			return this;
+		}
+
+		public Builder gameRef(String gameRef) {
+			attribute.gameRef = gameRef;
+			return this;
+		}
+
+		public Builder attributeGroup(AttributeGroup attributeGroup) {
+			attribute.attributeGroup = attributeGroup;
+			return this;
+		}
+
+		public Builder prefix(String prefix) {
+			attribute.prefix = prefix;
+			return this;
+		}
+
+		public Builder suffix(String suffix) {
+			attribute.suffix = suffix;
+			return this;
+		}
+
+		public Builder unit(@Nullable Unit unit) {
+			attribute.unit = unit;
+			return this;
+		}
+
+		public Builder name(String name) {
+			attribute.name = name;
+			return this;
+		}
+
+		public Builder exclusiveTo(@Nullable List<RivenType> exclusiveTo) {
+			attribute.exclusiveTo = exclusiveTo;
+			return this;
+		}
+
+		public Builder positiveOnly(boolean positiveOnly) {
+			attribute.positiveOnly = positiveOnly;
+			return this;
+		}
+
+		public Builder negativeOnly(boolean negativeOnly) {
+			attribute.negativeOnly = negativeOnly;
+			return this;
+		}
+
+		public Builder positiveIsNegative(boolean positiveIsNegative) {
+			attribute.positiveIsNegative = positiveIsNegative;
+			return this;
+		}
+
+		public Attribute build() {
+			return attribute;
+		}
+
+	}
+
 	public @Nullable Long getAttributeId() {
 		return attributeId;
 	}

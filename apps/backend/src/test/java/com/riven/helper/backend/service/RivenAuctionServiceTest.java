@@ -22,10 +22,8 @@ class RivenAuctionServiceTest {
 
 	@Test
 	void rejectsASnapshotOfAnotherAuctionBeforeWriting() {
-		RivenAuction auction = new RivenAuction();
-		auction.setAuctionId("a1");
-		RivenSnapshot snapshot = new RivenSnapshot();
-		snapshot.setAuctionId("a2");
+		RivenAuction auction = RivenAuction.builder().auctionId("a1").build();
+		RivenSnapshot snapshot = RivenSnapshot.builder().auctionId("a2").build();
 
 		assertThatThrownBy(() -> auctionService.archive(auction, snapshot))
 				.isInstanceOf(IllegalArgumentException.class).hasMessageContaining("a2");
