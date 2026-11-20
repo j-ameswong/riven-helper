@@ -18,6 +18,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.riven.helper.backend.TestcontainersConfiguration;
 import com.riven.helper.backend.dto.V1AuctionsDTO;
+import com.riven.helper.backend.repository.ListingCount;
 import com.riven.helper.backend.service.WarframeMarketRivenCrawlService.CrawlResult;
 
 import tools.jackson.databind.json.JsonMapper;
@@ -32,6 +33,9 @@ class WarframeMarketRivenCrawlServiceTest {
 
 	@Autowired
 	WarframeMarketRivenCrawlService crawlService;
+
+	@Autowired
+	RivenAuctionService auctionService;
 
 	@Autowired
 	JdbcClient jdbc;
@@ -61,7 +65,7 @@ class WarframeMarketRivenCrawlServiceTest {
 	void archivesTheBookAndSendsTheWeaponToTheBackOfTheQueue() {
 		givenBook(riven("a1", "2026-11-10T10:00"), riven("a2", "2026-11-10T10:00"));
 
-		assertThat(crawlService.crawlNext()).contains(new CrawlResult("rubico", 2, 0, true));
+		assertThat(crawlService.crawlNext()).contains(new CrawlResult("rubico", 2, 1, 0, true));
 
 		assertThat(count("riven_snapshots")).isEqualTo(2);
 		assertThat(count("weapons WHERE slug = 'rubico' AND last_crawled_at IS NOT NULL")).isOne();
@@ -81,6 +85,19 @@ class WarframeMarketRivenCrawlServiceTest {
 		givenBook(riven("a1", "2026-11-10T10:00"), riven("a2", "2026-11-10T10:00"));
 		crawlService.crawlNext();
 		assertThat(removed()).isEmpty();
+	}
+
+	@Test
+	void countsLiveAuctionsByTheirLatestSnapshot() {
+		givenBook(riven("a1", "2026-11-10T10:00"), riven("a2", "2026-11-10T10:00"));
+		crawlService.crawlNext();
+
+		givenRubicoIsNext();
+		givenBook(riven("a1", "2026-11-10T10:00", "2026-11-10T11:00", 4));
+		crawlService.crawlNext();
+
+		long rubico = jdbc.sql("SELECT weapon_id FROM weapons WHERE slug = 'rubico'").query(Long.class).single();
+		assertThat(auctionService.countLive(rubico)).containsExactly(new ListingCount((short) 12, 4, "madurai", 1));
 	}
 
 	@Test
@@ -114,7 +131,7 @@ class WarframeMarketRivenCrawlServiceTest {
 
 		givenRubicoIsNext();
 		when(client.searchRivenAuctions(anyMap())).thenThrow(new IllegalStateException("429"));
-		assertThat(crawlService.crawlNext()).contains(new CrawlResult("rubico", 0, 0, false));
+		assertThat(crawlService.crawlNext()).contains(new CrawlResult("rubico", 0, 1, 0, false));
 
 		assertThat(removed()).isEmpty();
 		assertThat(count("weapons WHERE slug = 'rubico' AND last_crawled_at IS NOT NULL")).isOne();
@@ -136,6 +153,10 @@ class WarframeMarketRivenCrawlServiceTest {
 	}
 
 	private static String riven(String id, String created) {
+		return riven(id, created, created, 3);
+	}
+
+	private static String riven(String id, String created, String updated, int reRolls) {
 		return """
 				{
 				  "id": "%s", "starting_price": 100, "buyout_price": 200, "is_direct_sell": false,
@@ -143,11 +164,11 @@ class WarframeMarketRivenCrawlServiceTest {
 				  "owner": { "id": "owner-%s" },
 				  "item": {
 				    "type": "riven", "weapon_url_name": "rubico", "polarity": "madurai",
-				    "mod_rank": 0, "mastery_level": 12, "re_rolls": 3,
+				    "mod_rank": 0, "mastery_level": 12, "re_rolls": %d,
 				    "attributes": [ { "url_name": "zoom", "value": -58.3, "positive": false } ]
 				  }
 				}
-				""".formatted(id, timestamp(created), timestamp(created), id);
+				""".formatted(id, timestamp(created), timestamp(updated), id, reRolls);
 	}
 
 	private static String timestamp(String time) {

@@ -223,7 +223,7 @@ Headers: `Platform`, `Language`. Returns `{ "payload": { "auctions": [Auction] }
 | `positive_stats` | comma-separated attribute slugs | Matches rivens that have the stat. One riven matches several values, so these can't split a weapon into separate groups. |
 | `negative_stats` | comma-separated attribute slugs, or `none` | `none` (lowercase) means "has no negative". `None` returns `400 negative_stats app.form.invalid`. A riven has at most one negative, so `none` plus each possible negative splits a weapon's rivens into groups that don't overlap. |
 | `operation` | `allOf` \| `anyOf` | How the stat lists combine |
-| `mastery_rank_min`, `mastery_rank_max` | integer | Inclusive. Riven mastery levels run `8`–`16`. |
+| `mastery_rank_min`, `mastery_rank_max` | integer | Inclusive. Rivens in the game run `8`–`16`, but the level is entered by the seller: 12 of ~196k listings on 2026-11-17 had `7`. |
 | `re_rolls_min`, `re_rolls_max` | integer | Inclusive. Sent twice, the first value wins. |
 | `mod_rank` | `any` \| `maxed` | `0`, `unranked`, etc. return `400 mod_rank app.form.invalid`. There's no "unranked only" filter. |
 | `polarity` | `any` \| `madurai` \| `vazarin` \| `naramon` | Polarities observed in results. Other polarities (e.g. `zenurik`) return `200` with `[]`. |
@@ -249,7 +249,7 @@ overlap, split the bucket and recurse:
 
 | Filter | Values | Notes |
 | --- | --- | --- |
-| `mastery_rank_min` = `mastery_rank_max` | `8` … `16` | 9 groups of fairly even size. Best first split. |
+| `mastery_rank_min`, `mastery_rank_max` | `≤8`, `9` … `15`, `16+` | 9 groups of fairly even size. Best first split. Open-ended ends catch levels the game doesn't have. |
 | `polarity` | `madurai`, `vazarin`, `naramon` | 3 roughly equal thirds |
 | `re_rolls_min` / `re_rolls_max` | bands, e.g. `0`, `1–3`, `4–10`, `11–25`, `26–60`, `61–150`, `151+` | Heavily skewed toward high roll counts |
 | `negative_stats` | `none` + every non-`positiveOnly` attribute the weapon's `rivenType` (`archgun` for archguns) can roll | ~25 values, mostly empty or tiny. Expensive, so use it last. |

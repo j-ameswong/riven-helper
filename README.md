@@ -43,7 +43,7 @@ Nothing is hard-deleted, and each price a seller sets is kept as its own row, be
   > Note: there's no way to tell between auction cancellations and sales
 - `riven_snapshots` holds one row per observed version of an auction, keyed `(auction_id, updated_at)` on a snapshot of `riven_auctions.updated_at`. Each row snapshots everything that can change: `buyout_price`, `starting_price`, `is_direct_sell`, `re_rolls`, `mod_rank`, `mastery_level`, `polarity` and `attributes`, plus the auction JSON as sent in `raw`, since history can't be refetched. When a crawl returns a new `last_updated_at`, a new row snapshot is inserted.
 
-The last version before removal is the closest proxy for a sale price. As we're likely to miss updates between snapshots, we should prioritize rivens with the most listings. We can tune update frequency once we've crawled all weapons and build the initial database.
+The last version before removal is the closest proxy for a sale price. Updates between snapshots can be missed, so a pass over every weapon should be as short as possible. Measured after the first full crawl, prioritising weapons by listing volume wouldn't help, so the crawl stays round robin and plans each weapon's buckets from its archived listings instead (see [the crawl plan](docs/riven-crawl.md)).
 
 5. The most complex part, a `RivenStatisticsService` that calculates riven price stats by weapon including time buckets, trends etc. It should have an interface flexible enough to handle a variety of search criteria across different entities.
 

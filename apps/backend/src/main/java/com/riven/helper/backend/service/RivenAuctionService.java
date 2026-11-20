@@ -2,6 +2,7 @@ package com.riven.helper.backend.service;
 
 import java.time.OffsetDateTime;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
@@ -9,6 +10,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.riven.helper.backend.domain.RivenAuction;
 import com.riven.helper.backend.domain.RivenSnapshot;
+import com.riven.helper.backend.repository.ListingCount;
 import com.riven.helper.backend.repository.RivenAuctionRepository;
 
 /** Owns every write to the riven_auctions table. */
@@ -48,6 +50,12 @@ public class RivenAuctionService {
 	@Transactional(readOnly = true)
 	public Optional<OffsetDateTime> findNewestCreatedAt() {
 		return auctionRepository.findNewestCreatedAt();
+	}
+
+	/** See {@link RivenAuctionRepository#countLive}. */
+	@Transactional(readOnly = true)
+	public List<ListingCount> countLive(long weaponId) {
+		return auctionRepository.countLive(weaponId);
 	}
 
 }

@@ -8,6 +8,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,11 +47,12 @@ public class WarframeMarketRivenCrawlService {
 
 	/**
 	 * @param auctions distinct auctions the crawl returned
+	 * @param requests searches sent, counting one that failed
 	 * @param removed auctions marked removed, always 0 unless {@code complete}
 	 * @param complete false if a request failed or a bucket overflowed, so some
 	 *        auctions may have been missed
 	 */
-	public record CrawlResult(String weaponSlug, int auctions, int removed, boolean complete) {
+	public record CrawlResult(String weaponSlug, int auctions, int requests, int removed, boolean complete) {
 	}
 
 	// The search rate limiter does the pacing; the delay only idles an empty queue
@@ -69,10 +71,13 @@ public class WarframeMarketRivenCrawlService {
 		Map<String, Long> weaponIds = Map.of(weapon.getSlug(), weaponId);
 		OffsetDateTime startedAt = OffsetDateTime.now();
 		Set<String> seen = new HashSet<>();
+		AtomicInteger requests = new AtomicInteger();
 		boolean complete = false;
 		int removed = 0;
 		try {
-			complete = RivenBookCrawler.crawl(Map.of("weapon_url_name", weapon.getSlug()), filters -> {
+			List<RivenBucket> plan = RivenBookPlanner.plan(auctionService.countLive(weaponId));
+			complete = RivenBookCrawler.crawl(Map.of("weapon_url_name", weapon.getSlug()), plan, filters -> {
+				requests.incrementAndGet();
 				List<JsonNode> page = search(filters);
 				page.forEach(node -> {
 					seen.add(node.path("id").asString());
@@ -93,7 +98,7 @@ public class WarframeMarketRivenCrawlService {
 			// Even after a failure, so one broken weapon can't block the queue
 			weaponService.markCrawled(weaponId);
 		}
-		CrawlResult result = new CrawlResult(weapon.getSlug(), seen.size(), removed, complete);
+		CrawlResult result = new CrawlResult(weapon.getSlug(), seen.size(), requests.get(), removed, complete);
 		log.info("Crawled {}", result);
 		return result;
 	}

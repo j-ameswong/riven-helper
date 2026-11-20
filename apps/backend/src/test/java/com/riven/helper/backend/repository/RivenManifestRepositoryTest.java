@@ -162,28 +162,28 @@ class RivenManifestRepositoryTest {
 	}
 
 	private static Weapon sampleWeapon(String slug, WeaponGroup weaponGroup, RivenType rivenType) {
-		Weapon weapon = new Weapon();
-		weapon.setApiWeaponId("api-" + slug);
-		weapon.setSlug(slug);
-		weapon.setGameRef("/Lotus/Weapons/" + slug);
-		weapon.setWeaponGroup(weaponGroup);
-		weapon.setRivenType(rivenType);
-		weapon.setReqMasteryRank((short) 11);
-		weapon.setName(slug);
-		return weapon;
+		return Weapon.builder()
+				.apiWeaponId("api-" + slug)
+				.slug(slug)
+				.gameRef("/Lotus/Weapons/" + slug)
+				.weaponGroup(weaponGroup)
+				.rivenType(rivenType)
+				.reqMasteryRank((short) 11)
+				.name(slug)
+				.build();
 	}
 
 	private static Attribute sampleAttribute(String slug) {
-		Attribute attribute = new Attribute();
-		attribute.setApiAttributeId("api-" + slug);
-		attribute.setSlug(slug);
-		attribute.setGameRef("WeaponDamagePercent");
-		attribute.setAttributeGroup(AttributeGroup.DEFAULT);
-		attribute.setPrefix("Mach");
-		attribute.setSuffix("Turret");
-		attribute.setUnit(Unit.PERCENT);
-		attribute.setName(slug);
-		return attribute;
+		return Attribute.builder()
+				.apiAttributeId("api-" + slug)
+				.slug(slug)
+				.gameRef("WeaponDamagePercent")
+				.attributeGroup(AttributeGroup.DEFAULT)
+				.prefix("Mach")
+				.suffix("Turret")
+				.unit(Unit.PERCENT)
+				.name(slug)
+				.build();
 	}
 
 	private static void assertViolatesConstraint(String constraintName, ThrowingCallable save) {

@@ -32,6 +32,57 @@ public class RivenAuction {
 	// Set when a complete crawl of the weapon no longer returns it
 	private @Nullable OffsetDateTime removedAt;
 
+	// For JPA
+	protected RivenAuction() {
+	}
+
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	public static final class Builder {
+
+		private final RivenAuction rivenAuction = new RivenAuction();
+
+		private Builder() {
+		}
+
+		public Builder auctionId(String auctionId) {
+			rivenAuction.auctionId = auctionId;
+			return this;
+		}
+
+		public Builder weaponId(long weaponId) {
+			rivenAuction.weaponId = weaponId;
+			return this;
+		}
+
+		public Builder ownerId(String ownerId) {
+			rivenAuction.ownerId = ownerId;
+			return this;
+		}
+
+		public Builder createdAt(OffsetDateTime createdAt) {
+			rivenAuction.createdAt = createdAt;
+			return this;
+		}
+
+		public Builder lastUpdatedAt(OffsetDateTime lastUpdatedAt) {
+			rivenAuction.lastUpdatedAt = lastUpdatedAt;
+			return this;
+		}
+
+		public Builder removedAt(@Nullable OffsetDateTime removedAt) {
+			rivenAuction.removedAt = removedAt;
+			return this;
+		}
+
+		public RivenAuction build() {
+			return rivenAuction;
+		}
+
+	}
+
 	public String getAuctionId() {
 		return auctionId;
 	}

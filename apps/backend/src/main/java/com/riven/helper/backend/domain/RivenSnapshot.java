@@ -53,6 +53,82 @@ public class RivenSnapshot {
 	@ColumnTransformer(write = "?::jsonb")
 	private String raw;
 
+	// For JPA
+	protected RivenSnapshot() {
+	}
+
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	public static final class Builder {
+
+		private final RivenSnapshot rivenSnapshot = new RivenSnapshot();
+
+		private Builder() {
+		}
+
+		public Builder auctionId(String auctionId) {
+			rivenSnapshot.auctionId = auctionId;
+			return this;
+		}
+
+		public Builder updatedAt(OffsetDateTime updatedAt) {
+			rivenSnapshot.updatedAt = updatedAt;
+			return this;
+		}
+
+		public Builder startingPrice(int startingPrice) {
+			rivenSnapshot.startingPrice = startingPrice;
+			return this;
+		}
+
+		public Builder buyoutPrice(@Nullable Integer buyoutPrice) {
+			rivenSnapshot.buyoutPrice = buyoutPrice;
+			return this;
+		}
+
+		public Builder directSell(boolean isDirectSell) {
+			rivenSnapshot.isDirectSell = isDirectSell;
+			return this;
+		}
+
+		public Builder reRolls(int reRolls) {
+			rivenSnapshot.reRolls = reRolls;
+			return this;
+		}
+
+		public Builder modRank(short modRank) {
+			rivenSnapshot.modRank = modRank;
+			return this;
+		}
+
+		public Builder masteryLevel(short masteryLevel) {
+			rivenSnapshot.masteryLevel = masteryLevel;
+			return this;
+		}
+
+		public Builder polarity(String polarity) {
+			rivenSnapshot.polarity = polarity;
+			return this;
+		}
+
+		public Builder attributes(String attributes) {
+			rivenSnapshot.attributes = attributes;
+			return this;
+		}
+
+		public Builder raw(String raw) {
+			rivenSnapshot.raw = raw;
+			return this;
+		}
+
+		public RivenSnapshot build() {
+			return rivenSnapshot;
+		}
+
+	}
+
 	public String getAuctionId() {
 		return auctionId;
 	}
