@@ -9,7 +9,7 @@ is step 4 of the [README](../README.md) plan. The API behaviour it relies on is 
 | Question | Decision |
 | --- | --- |
 | Seed and re-crawl | One loop. It always crawls the weapon crawled longest ago, never-crawled weapons first. |
-| Cycle time | About 6 hours for all ~420 weapons at the search rate limit, down from 11.4 h with fixed splits. `removed_at` has that resolution. |
+| Cycle time | 5 h 50 m for all 420 weapons at the search rate limit, down from 11.4 h with fixed splits. `removed_at` has that resolution. |
 | Removal confirmation | None. A listing missing from a complete crawl is marked removed. `/v1/auctions/entry/{id}` is not called, because the rate limit is the bottleneck. |
 | False removals | Accepted. A listing seen again has its `removed_at` cleared. |
 | Splits | Planned per weapon from its archived listings: mastery ranges, then re-roll ranges, then polarity. Fixed splits only break up a bucket that turns out bigger than planned. No negative-stat split. |
@@ -18,14 +18,31 @@ is step 4 of the [README](../README.md) plan. The API behaviour it relies on is 
 
 ## Measured
 
-From a 23-hour run on 2026-11-17, replayed offline against the archive:
+Fixed splits were measured over a 23-hour run on 2026-11-17 and replayed offline against the archive.
+Planned buckets were measured from 13.5 hours of logs on 2026-11-20, plus the `removed_at` stamps
+going back to the switch on 2026-11-17.
 
-- 187k live listings, about twice the estimate. Fixed splits needed 4,572 requests a pass (41
-  listings each), so a pass took 11.4 h. The same book, planned as below, needs about 2,335 requests
-  (80 listings each, 5.8 h).
-- No `429`s. Searches went out exactly every 9 s.
-- No bucket overflowed. The largest re-roll bucket held 75 listings, so the negative-stat split
-  isn't needed.
+| | Fixed splits | Planned buckets |
+| --- | --- | --- |
+| Live listings | 187k | 185k |
+| Requests a pass | 4,572 | 2,336 and 2,347 (modelled: 2,335) |
+| Listings per request | 41 | 78 |
+| Cycle time | 11.4 h | 5 h 50 m, and a median of 5.85 h on each day since the switch |
+| Search pacing | Every 9 s, no `429`s | Same |
+| Overflowing buckets | None | None |
+| Failed crawls | 2 connection resets in 23 h | 1 connection reset in 13.5 h |
+| Reappeared after removal | Not measured | 0.5% (seen again within two crawls) |
+
+- 391 of 420 weapons send exactly the planned number of requests. Fallback splits cost about 2% of
+  a pass, from about 6 weapons whose listings tie on price where the two pages meet. On embolist,
+  the 78th to 100th cheapest listings are all 20p, so the strict check can't show that the two pages
+  read the whole bucket. Search has no price filter that could settle a tie.
+- No bucket grew past its plan between crawls. Planning to 90 and 190 would save 4.6% of requests,
+  but 190 is more than two pages of 94 can hold.
+- The largest re-roll bucket under fixed splits held 75 listings, so the negative-stat split isn't
+  needed.
+- The connection resets come from the warframe.market end partway through a response. The JDK client
+  doesn't retry them, so the weapon waits for its next turn.
 - Changes found per request don't depend on a weapon's size. Crawling each weapon in proportion to
   √(changes ÷ cost) instead of round robin would cut undetected changes by at most 10%.
 
@@ -65,6 +82,22 @@ Cuts fall only at values in the book, and the first and last range of each filte
 the buckets cover every possible listing. A weapon with nothing archived yet gets one bucket for its
 whole book, which the fixed splits below break up.
 
+For example, arca_plasmor's 1,442 live listings on 2026-11-20 are planned as 11 buckets, read with 17
+requests. `●` is one request (up to 85 listings) and `●●` is a `price_asc`/`price_desc` pair (up to
+180):
+
+```mermaid
+flowchart LR
+  B["arca_plasmor · 1,442"]
+  B --> M1["MR ≤12 · 837"] & M2["MR ≥13 · 605"]
+  M1 --> R0["RR 0 · 240"]
+  M1 --> A["RR 1–11 · 176 ●●"] & C["RR 12–27 · 172 ●●"]
+  M1 --> D["RR 28–76 · 179 ●●"] & E["RR 77+ · 70 ●"]
+  R0 --> P1["madurai · 80 ●"] & P2["vazarin · 77 ●"] & P3["naramon · 83 ●"]
+  M2 --> F["RR 0 · 173 ●●"] & G["RR 1–17 · 174 ●●"]
+  M2 --> H["RR 18–50 · 178 ●●"] & I["RR 51+ · 80 ●"]
+```
+
 ### Reading a bucket
 
 1. Request it sorted `price_asc`. Fewer than 95 results means that page is the whole bucket.
@@ -73,6 +106,18 @@ whole book, which the fixed splits below break up.
    as infinitely expensive.
 3. Otherwise split the bucket on the next filter below that separates it, narrowing it to each value
    in turn, and read each part the same way.
+
+```mermaid
+flowchart TD
+  A[price_asc] --> B{fewer than 95?}
+  B -- yes --> Done([bucket read])
+  B -- no --> C[price_desc]
+  C --> D{"lowest desc price<br>below highest asc?"}
+  D -- yes --> Done
+  D -- no --> E{"next fixed split<br>separates it?"}
+  E -- yes --> F[read each part] --> A
+  E -- no --> G(["overflow logged,<br>crawl incomplete"])
+```
 
 | Order | Filter | Values |
 | --- | --- | --- |
@@ -98,7 +143,8 @@ these hold:
 - the listing was created before the crawl started, so one the poll archived mid-crawl is left alone
 
 Archiving a listing clears its `removed_at`. This undoes a false removal, which happens when a price
-edit moves a listing across the page cutoff between the two requests of a pair.
+edit moves a listing across the page cutoff between the two requests of a pair. It also brings back
+a listing its seller made private and then public again.
 
 ## Failures
 
