@@ -1,0 +1,187 @@
+# A listed riven can't be edited, only its price and buyout policy, so its
+# fields move from every riven_snapshots row to riven_auctions, and its stats
+# to one riven_attributes row each. riven_snapshots.raw keeps them as sent.
+databaseChangeLog:
+  - changeSet:
+      id: 006-move-riven-fields-to-auctions
+      author: Cheng An Wong
+      preConditions:
+        - onFail: HALT
+        - onFailMessage: An auction's riven fields differ between its snapshots, so they can't move to riven_auctions
+        - sqlCheck:
+            expectedResult: 0
+            sql: >-
+              SELECT count(*) FROM (
+                SELECT auction_id FROM riven_snapshots GROUP BY auction_id
+                HAVING count(DISTINCT (re_rolls, mod_rank, mastery_level, polarity, attributes)) > 1) d
+      changes:
+        - addColumn:
+            tableName: riven_auctions
+            columns:
+              - column:
+                  name: re_rolls
+                  type: integer
+              - column:
+                  name: mod_rank
+                  type: smallint
+              - column:
+                  name: mastery_level
+                  type: smallint
+              # No CHECK: an unexpected polarity must not fail the whole poll
+              - column:
+                  name: polarity
+                  type: text
+        - sql:
+            sql: >-
+              UPDATE riven_auctions a
+              SET re_rolls = s.re_rolls, mod_rank = s.mod_rank, mastery_level = s.mastery_level, polarity = s.polarity
+              FROM riven_snapshots s
+              WHERE s.auction_id = a.auction_id
+        - addNotNullConstraint:
+            tableName: riven_auctions
+            columnName: re_rolls
+        - addNotNullConstraint:
+            tableName: riven_auctions
+            columnName: mod_rank
+        - addNotNullConstraint:
+            tableName: riven_auctions
+            columnName: mastery_level
+        - addNotNullConstraint:
+            tableName: riven_auctions
+            columnName: polarity
+      rollback:
+        - dropColumn:
+            tableName: riven_auctions
+            columns:
+              - column:
+                  name: re_rolls
+              - column:
+                  name: mod_rank
+              - column:
+                  name: mastery_level
+              - column:
+                  name: polarity
+
+  - changeSet:
+      id: 006-create-riven-attributes
+      author: Cheng An Wong
+      preConditions:
+        - onFail: HALT
+        - onFailMessage: A riven stat isn't in attributes, so its riven_attributes row would be lost
+        - sqlCheck:
+            expectedResult: 0
+            sql: >-
+              SELECT count(*) FROM riven_snapshots s, jsonb_array_elements(s.attributes) e
+              WHERE NOT EXISTS (SELECT 1 FROM attributes a WHERE a.slug = e->>'url_name')
+      changes:
+        - createTable:
+            tableName: riven_attributes
+            columns:
+              - column:
+                  name: auction_id
+                  type: text
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_riven_attributes_auction
+                    references: riven_auctions(auction_id)
+              - column:
+                  name: attribute_id
+                  type: bigint
+                  constraints:
+                    nullable: false
+                    foreignKeyName: fk_riven_attributes_attribute
+                    references: attributes(attribute_id)
+              # As the game shows it at the listed mod_rank, sign included
+              - column:
+                  name: value
+                  type: double precision
+                  constraints:
+                    nullable: false
+              # Whether the stat helps the weapon, not the sign of value
+              - column:
+                  name: positive
+                  type: boolean
+                  constraints:
+                    nullable: false
+        - addPrimaryKey:
+            tableName: riven_attributes
+            columnNames: auction_id, attribute_id
+            constraintName: pk_riven_attributes
+        - createIndex:
+            tableName: riven_attributes
+            indexName: ix_riven_attributes_attribute_value
+            columns:
+              - column:
+                  name: attribute_id
+              - column:
+                  name: value
+        - sql:
+            sql: >-
+              INSERT INTO riven_attributes (auction_id, attribute_id, value, positive)
+              SELECT DISTINCT ON (s.auction_id, a.attribute_id)
+                s.auction_id, a.attribute_id, (e->>'value')::double precision, (e->>'positive')::boolean
+              FROM riven_snapshots s
+              CROSS JOIN jsonb_array_elements(s.attributes) e
+              JOIN attributes a ON a.slug = e->>'url_name'
+      rollback:
+        - dropTable:
+            tableName: riven_attributes
+
+  - changeSet:
+      id: 006-drop-snapshot-riven-fields
+      author: Cheng An Wong
+      changes:
+        - dropColumn:
+            tableName: riven_snapshots
+            columns:
+              - column:
+                  name: re_rolls
+              - column:
+                  name: mod_rank
+              - column:
+                  name: mastery_level
+              - column:
+                  name: polarity
+              - column:
+                  name: attributes
+      # Restored from raw, which the columns were read from
+      rollback:
+        - addColumn:
+            tableName: riven_snapshots
+            columns:
+              - column:
+                  name: re_rolls
+                  type: integer
+              - column:
+                  name: mod_rank
+                  type: smallint
+              - column:
+                  name: mastery_level
+                  type: smallint
+              - column:
+                  name: polarity
+                  type: text
+              - column:
+                  name: attributes
+                  type: jsonb
+        - sql:
+            sql: >-
+              UPDATE riven_snapshots
+              SET re_rolls = (raw->'item'->>'re_rolls')::integer, mod_rank = (raw->'item'->>'mod_rank')::smallint,
+                mastery_level = (raw->'item'->>'mastery_level')::smallint, polarity = raw->'item'->>'polarity',
+                attributes = raw->'item'->'attributes'
+        - addNotNullConstraint:
+            tableName: riven_snapshots
+            columnName: re_rolls
+        - addNotNullConstraint:
+            tableName: riven_snapshots
+            columnName: mod_rank
+        - addNotNullConstraint:
+            tableName: riven_snapshots
+            columnName: mastery_level
+        - addNotNullConstraint:
+            tableName: riven_snapshots
+            columnName: polarity
+        - addNotNullConstraint:
+            tableName: riven_snapshots
+            columnName: attributes

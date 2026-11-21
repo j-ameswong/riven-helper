@@ -7,6 +7,7 @@ import java.time.OffsetDateTime;
 import org.junit.jupiter.api.Test;
 import org.mapstruct.factory.Mappers;
 
+import com.riven.helper.backend.domain.RivenAttribute;
 import com.riven.helper.backend.domain.RivenAuction;
 import com.riven.helper.backend.domain.RivenSnapshot;
 import com.riven.helper.backend.dto.RivenAuctionDTO;
@@ -42,6 +43,21 @@ class RivenMapperTest {
 		assertThat(auction.getCreatedAt()).isEqualTo(OffsetDateTime.parse("2026-11-10T10:00:00Z"));
 		assertThat(auction.getLastUpdatedAt()).isEqualTo(OffsetDateTime.parse("2026-11-10T10:05:00Z"));
 		assertThat(auction.getRemovedAt()).isNull();
+		assertThat(auction.getModRank()).isEqualTo((short) 8);
+		assertThat(auction.getMasteryLevel()).isEqualTo((short) 12);
+		assertThat(auction.getReRolls()).isEqualTo(3);
+		assertThat(auction.getPolarity()).isEqualTo("madurai");
+	}
+
+	@Test
+	void mapsAnAttributeWithTheResolvedAttributeId() {
+		RivenAttribute attribute = Mappers.getMapper(RivenAuctionMapper.class)
+				.toEntity("a1", 7, DTO.item().attributes().getFirst());
+
+		assertThat(attribute.getAuctionId()).isEqualTo("a1");
+		assertThat(attribute.getAttributeId()).isEqualTo(7);
+		assertThat(attribute.getValue()).isEqualTo(-58.3);
+		assertThat(attribute.isPositive()).isFalse();
 	}
 
 	@Test
@@ -52,11 +68,6 @@ class RivenMapperTest {
 		assertThat(snapshot.getUpdatedAt()).isEqualTo(OffsetDateTime.parse("2026-11-10T10:05:00Z"));
 		assertThat(snapshot.getStartingPrice()).isEqualTo(100);
 		assertThat(snapshot.getBuyoutPrice()).isNull();
-		assertThat(snapshot.getModRank()).isEqualTo((short) 8);
-		assertThat(snapshot.getMasteryLevel()).isEqualTo((short) 12);
-		assertThat(snapshot.getReRolls()).isEqualTo(3);
-		assertThat(snapshot.getPolarity()).isEqualTo("madurai");
-		assertThat(snapshot.getAttributes()).isEqualTo(RAW.path("item").path("attributes").toString());
 		assertThat(snapshot.getRaw()).isEqualTo(RAW.toString());
 	}
 

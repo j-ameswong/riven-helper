@@ -19,8 +19,10 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import com.riven.helper.backend.TestcontainersConfiguration;
+import com.riven.helper.backend.domain.RivenAttribute;
 import com.riven.helper.backend.domain.RivenSnapshot;
 import com.riven.helper.backend.dto.V1AuctionsDTO;
+import com.riven.helper.backend.repository.RivenAttributeRepository;
 import com.riven.helper.backend.repository.RivenAuctionRepository;
 import com.riven.helper.backend.repository.RivenSnapshotRepository;
 
@@ -53,19 +55,26 @@ class WarframeMarketAuctionPollServiceTest {
 	RivenAuctionRepository auctionRepository;
 
 	@Autowired
+	RivenAttributeRepository attributeRepository;
+
+	@Autowired
 	RivenSnapshotRepository snapshotRepository;
 
 	@BeforeEach
-	void givenRubico() {
+	void givenRubicoAndItsStats() {
 		insertWeapon("rubico");
+		insertAttribute("critical_chance");
+		insertAttribute("zoom");
 	}
 
-	// After, not before: other test classes delete weapons, which these rows reference
+	// After, not before: other test classes delete weapons and attributes, which these rows reference
 	@AfterEach
 	void clearTables() {
 		jdbc.sql("DELETE FROM riven_snapshots").update();
+		jdbc.sql("DELETE FROM riven_attributes").update();
 		jdbc.sql("DELETE FROM riven_auctions").update();
 		jdbc.sql("DELETE FROM weapons WHERE slug = 'brand_new_gun'").update();
+		jdbc.sql("DELETE FROM attributes WHERE slug = 'brand_new_stat'").update();
 	}
 
 	@Test
@@ -77,15 +86,19 @@ class WarframeMarketAuctionPollServiceTest {
 		assertThat(pollService.poll()).isEqualTo(new WarframeMarketAuctionPollService.PollResult(1, false));
 
 		assertThat(jdbc.sql("""
-				SELECT w.slug, a.owner_id FROM riven_auctions a JOIN weapons w USING (weapon_id)
+				SELECT w.slug, a.owner_id, a.polarity FROM riven_auctions a JOIN weapons w USING (weapon_id)
 				WHERE a.auction_id = 'a1'
-				""").query().singleRow()).isEqualTo(Map.of("slug", "rubico", "owner_id", "owner-a1"));
-		assertThat(jdbc.sql("""
-				SELECT buyout_price, polarity, attributes->0->>'url_name' AS first_stat, raw->'owner'->>'ingame_name' AS seller
-				FROM riven_snapshots WHERE auction_id = 'a1'
 				""").query().singleRow())
-				.isEqualTo(Map.of("buyout_price", 200, "polarity", "madurai", "first_stat", "critical_chance",
-						"seller", "Seller"));
+				.isEqualTo(Map.of("slug", "rubico", "owner_id", "owner-a1", "polarity", "madurai"));
+		assertThat(jdbc.sql("""
+				SELECT t.slug, r.value, r.positive FROM riven_attributes r JOIN attributes t USING (attribute_id)
+				WHERE r.auction_id = 'a1' ORDER BY t.slug
+				""").query().listOfRows()).containsExactly(
+						Map.of("slug", "critical_chance", "value", 120.5, "positive", true),
+						Map.of("slug", "zoom", "value", -58.3, "positive", false));
+		assertThat(jdbc.sql("""
+				SELECT buyout_price, raw->'owner'->>'ingame_name' AS seller FROM riven_snapshots WHERE auction_id = 'a1'
+				""").query().singleRow()).isEqualTo(Map.of("buyout_price", 200, "seller", "Seller"));
 		assertThat(count("riven_auctions")).isOne();
 		verify(syncService, never()).sync(anyBoolean());
 	}
@@ -99,13 +112,14 @@ class WarframeMarketAuctionPollServiceTest {
 			assertThat(auction.getOwnerId()).isEqualTo("owner-a1");
 			assertThat(auction.getCreatedAt()).isEqualTo(time("10:00"));
 			assertThat(auction.getRemovedAt()).isNull();
+			assertThat(auction.getMasteryLevel()).isEqualTo((short) 12);
 		});
+		assertThat(attributeRepository.findByAuctionId("a1")).extracting(RivenAttribute::getValue)
+				.containsExactlyInAnyOrder(120.5, -58.3);
 		assertThat(snapshotRepository.findById(new RivenSnapshot.Key("a1", time("10:05")))).hasValueSatisfying(
 				snapshot -> {
 					assertThat(snapshot.getBuyoutPrice()).isEqualTo(200);
 					assertThat(snapshot.isDirectSell()).isFalse();
-					assertThat(snapshot.getMasteryLevel()).isEqualTo((short) 12);
-					assertThat(snapshot.getAttributes()).contains("critical_chance");
 					assertThat(snapshot.getRaw()).contains("\"ingame_name\"");
 				});
 	}
@@ -164,6 +178,28 @@ class WarframeMarketAuctionPollServiceTest {
 	}
 
 	@Test
+	void skipsARivenWithAnAttributeTheSyncDoesNotFind() {
+		givenFeed(riven("a1", "10:00", "10:00", "200"),
+				riven("a2", "10:00", "10:00", "200").replace("\"zoom\"", "\"brand_new_stat\""));
+
+		assertThat(pollService.poll().rivens()).isOne();
+		assertThat(count("riven_attributes WHERE auction_id = 'a2'")).isZero();
+		verify(syncService).sync(false);
+	}
+
+	@Test
+	void keepsARivenWithAnAttributeTheSyncPicksUp() {
+		givenFeed(riven("a1", "10:00", "10:00", "200").replace("\"zoom\"", "\"brand_new_stat\""));
+		when(syncService.sync(false)).thenAnswer(invocation -> {
+			insertAttribute("brand_new_stat");
+			return null;
+		});
+
+		assertThat(pollService.poll().rivens()).isOne();
+		assertThat(count("riven_attributes WHERE auction_id = 'a1'")).isEqualTo(2);
+	}
+
+	@Test
 	void skipsTheUnknownRivenWhenTheSyncFails() {
 		givenFeed(riven("a1", "10:00", "10:00", "200"), riven("a2", "10:00", "10:00", "200", "brand_new_gun"));
 		when(syncService.sync(false)).thenThrow(new IllegalStateException("429"));
@@ -193,6 +229,14 @@ class WarframeMarketAuctionPollServiceTest {
 		jdbc.sql("""
 				INSERT INTO weapons (api_weapon_id, slug, game_ref, weapon_group, riven_type, req_mastery_rank, name)
 				VALUES (?, ?, '/Lotus/x', 'primary', 'rifle', 4, ?)
+				ON CONFLICT DO NOTHING
+				""").params("api-" + slug, slug, slug).update();
+	}
+
+	private void insertAttribute(String slug) {
+		jdbc.sql("""
+				INSERT INTO attributes (api_attribute_id, slug, game_ref, attribute_group, prefix, suffix, name)
+				VALUES (?, ?, '/Lotus/x', 'default', 'Crita', 'Cron', ?)
 				ON CONFLICT DO NOTHING
 				""").params("api-" + slug, slug, slug).update();
 	}

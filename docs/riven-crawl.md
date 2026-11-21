@@ -50,8 +50,8 @@ reads each one, and splits any that turns out bigger than planned.
 
 ### Planning
 
-The weapon's live listings are counted by mastery level, re-rolls and polarity, taken from each
-listing's latest snapshot. The book is then cut into buckets, picking the cuts that need the fewest
+The weapon's live listings are counted by mastery level, re-rolls and polarity, which
+`riven_auctions` holds. The book is then cut into buckets, picking the cuts that need the fewest
 requests:
 
 1. A book of up to 180 listings is one bucket.
@@ -116,7 +116,7 @@ marked, and the weapon goes to the back of the queue. A `429` also pauses the se
 - **Scheduler**: two threads instead of one, so a crawl blocked on the limiter doesn't hold up the
   poll.
 - **Client**: `GET /v1/auctions/search` with the filters as query parameters.
-- **Planning**: one grouped query over the weapon's live listings and their latest snapshots, so no
+- **Planning**: one grouped query over the weapon's live listings, so no
   schema change. Each crawl logs how many requests it sent.
 
 ## Left out

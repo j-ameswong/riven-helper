@@ -3,7 +3,6 @@ package com.riven.helper.backend.service;
 import java.time.OffsetDateTime;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
@@ -13,6 +12,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.riven.helper.backend.dto.V1AuctionsDTO;
+import com.riven.helper.backend.service.RivenAuctionReader.Manifest;
 import com.riven.helper.backend.service.RivenAuctionReader.Riven;
 
 import tools.jackson.databind.JsonNode;
@@ -34,15 +34,19 @@ public class WarframeMarketAuctionPollService {
 
 	private final WeaponService weaponService;
 
+	private final AttributeService attributeService;
+
 	private final RivenAuctionService auctionService;
 
 	private final RivenAuctionReader reader;
 
 	WarframeMarketAuctionPollService(WarframeMarketRestClient client, WarframeMarketRivenSyncService syncService,
-			WeaponService weaponService, RivenAuctionService auctionService, RivenAuctionReader reader) {
+			WeaponService weaponService, AttributeService attributeService, RivenAuctionService auctionService,
+			RivenAuctionReader reader) {
 		this.client = client;
 		this.syncService = syncService;
 		this.weaponService = weaponService;
+		this.attributeService = attributeService;
 		this.auctionService = auctionService;
 		this.reader = reader;
 	}
@@ -68,8 +72,8 @@ public class WarframeMarketAuctionPollService {
 		List<JsonNode> rivenNodes = response.payload().auctions().stream()
 				.filter(node -> "riven".equals(node.path("item").path("type").asString()))
 				.toList();
-		Map<String, Long> weaponIds = weaponIds(rivenNodes);
-		List<Riven> rivens = rivenNodes.stream().flatMap(node -> reader.read(node, weaponIds).stream()).toList();
+		Manifest manifest = manifest(rivenNodes);
+		List<Riven> rivens = rivenNodes.stream().flatMap(node -> reader.read(node, manifest).stream()).toList();
 		if (rivens.isEmpty()) {
 			log.warn("/v1/auctions returned no riven auctions");
 			return new PollResult(0, false);
@@ -84,30 +88,30 @@ public class WarframeMarketAuctionPollService {
 					newestKnown.get(), oldest);
 		}
 
-		rivens.forEach(riven -> auctionService.archive(riven.auction(), riven.snapshot()));
+		rivens.forEach(riven -> auctionService.archive(riven.auction(), riven.attributes(), riven.snapshot()));
 		log.debug("Polled {} riven auctions", rivens.size());
 		return new PollResult(rivens.size(), gap);
 	}
 
-	// A weapon newer than the hourly manifest sync would otherwise lose its first
-	// listings for good, as they only stay in the feed for ~10 minutes
-	private Map<String, Long> weaponIds(List<JsonNode> rivenNodes) {
-		Map<String, Long> weaponIds = weaponService.findIdsBySlug();
-		if (rivenNodes.stream().allMatch(node -> weaponIds.containsKey(weaponSlug(node)))) {
-			return weaponIds;
+	// A weapon or attribute newer than the hourly manifest sync would otherwise lose
+	// its first listings for good, as they only stay in the feed for ~10 minutes
+	private Manifest manifest(List<JsonNode> rivenNodes) {
+		Manifest manifest = loadManifest();
+		if (rivenNodes.stream().allMatch(manifest::knows)) {
+			return manifest;
 		}
 		try {
 			syncService.sync(false);
 		}
 		catch (RuntimeException ex) {
-			log.warn("Manifest sync for unknown weapons failed", ex);
-			return weaponIds;
+			log.warn("Manifest sync for unknown weapons or attributes failed", ex);
+			return manifest;
 		}
-		return weaponService.findIdsBySlug();
+		return loadManifest();
 	}
 
-	private static String weaponSlug(JsonNode node) {
-		return node.path("item").path("weapon_url_name").asString();
+	private Manifest loadManifest() {
+		return new Manifest(weaponService.findIdsBySlug(), attributeService.findIdsBySlug());
 	}
 
 }

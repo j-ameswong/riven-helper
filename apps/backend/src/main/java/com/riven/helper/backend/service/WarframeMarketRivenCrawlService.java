@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 import com.riven.helper.backend.domain.Weapon;
 import com.riven.helper.backend.dto.V1AuctionsDTO;
+import com.riven.helper.backend.service.RivenAuctionReader.Manifest;
 
 import tools.jackson.databind.JsonNode;
 
@@ -33,14 +34,17 @@ public class WarframeMarketRivenCrawlService {
 
 	private final WeaponService weaponService;
 
+	private final AttributeService attributeService;
+
 	private final RivenAuctionService auctionService;
 
 	private final RivenAuctionReader reader;
 
 	WarframeMarketRivenCrawlService(WarframeMarketRestClient client, WeaponService weaponService,
-			RivenAuctionService auctionService, RivenAuctionReader reader) {
+			AttributeService attributeService, RivenAuctionService auctionService, RivenAuctionReader reader) {
 		this.client = client;
 		this.weaponService = weaponService;
+		this.attributeService = attributeService;
 		this.auctionService = auctionService;
 		this.reader = reader;
 	}
@@ -68,7 +72,7 @@ public class WarframeMarketRivenCrawlService {
 
 	private CrawlResult crawl(Weapon weapon) {
 		long weaponId = Objects.requireNonNull(weapon.getWeaponId());
-		Map<String, Long> weaponIds = Map.of(weapon.getSlug(), weaponId);
+		Manifest manifest = new Manifest(Map.of(weapon.getSlug(), weaponId), attributeService.findIdsBySlug());
 		OffsetDateTime startedAt = OffsetDateTime.now();
 		Set<String> seen = new HashSet<>();
 		AtomicInteger requests = new AtomicInteger();
@@ -81,8 +85,8 @@ public class WarframeMarketRivenCrawlService {
 				List<JsonNode> page = search(filters);
 				page.forEach(node -> {
 					seen.add(node.path("id").asString());
-					reader.read(node, weaponIds)
-							.ifPresent(riven -> auctionService.archive(riven.auction(), riven.snapshot()));
+					reader.read(node, manifest).ifPresent(
+							riven -> auctionService.archive(riven.auction(), riven.attributes(), riven.snapshot()));
 				});
 				return page;
 			});

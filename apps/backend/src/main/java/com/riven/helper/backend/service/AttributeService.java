@@ -2,6 +2,7 @@ package com.riven.helper.backend.service;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -32,6 +33,13 @@ public class AttributeService {
 			attribute.setAttributeId(current == null ? null : current.getAttributeId());
 		});
 		attributeRepository.saveAll(attributes);
+	}
+
+	/** Every attribute's id, keyed by its slug (an auction attribute's {@code url_name}). */
+	@Transactional(readOnly = true)
+	public Map<String, Long> findIdsBySlug() {
+		return attributeRepository.findAll().stream().collect(
+				Collectors.toMap(Attribute::getSlug, attribute -> Objects.requireNonNull(attribute.getAttributeId())));
 	}
 
 }

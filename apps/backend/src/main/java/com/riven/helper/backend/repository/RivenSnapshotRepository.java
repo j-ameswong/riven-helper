@@ -17,11 +17,9 @@ public interface RivenSnapshotRepository extends Repository<RivenSnapshot, Riven
 	/** Inserts the snapshot unless that version of the auction is already stored. */
 	@Modifying
 	@Query(nativeQuery = true, value = """
-			INSERT INTO riven_snapshots (auction_id, updated_at, starting_price, buyout_price, is_direct_sell,
-				re_rolls, mod_rank, mastery_level, polarity, attributes, raw)
+			INSERT INTO riven_snapshots (auction_id, updated_at, starting_price, buyout_price, is_direct_sell, raw)
 			VALUES (:#{#s.auctionId}, :#{#s.updatedAt}, :#{#s.startingPrice}, CAST(:#{#s.buyoutPrice} AS integer),
-				:#{#s.directSell}, :#{#s.reRolls}, :#{#s.modRank}, :#{#s.masteryLevel}, :#{#s.polarity},
-				CAST(:#{#s.attributes} AS jsonb), CAST(:#{#s.raw} AS jsonb))
+				:#{#s.directSell}, CAST(:#{#s.raw} AS jsonb))
 			ON CONFLICT (auction_id, updated_at) DO NOTHING
 			""")
 	void insertIfAbsent(@Param("s") RivenSnapshot snapshot);

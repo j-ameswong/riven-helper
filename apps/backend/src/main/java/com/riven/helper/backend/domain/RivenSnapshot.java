@@ -12,9 +12,10 @@ import org.hibernate.annotations.ColumnTransformer;
 import org.jspecify.annotations.Nullable;
 
 /**
- * One observed version of a {@link RivenAuction}, keyed on the auction's
+ * One observed price of a {@link RivenAuction}, keyed on the auction's
  * {@code updated} timestamp. The database schema is owned by Liquibase (see
- * db/changelog/004-riven-auctions.yaml); this class only maps to it.
+ * db/changelog/004-riven-auctions.yaml and 006-immutable-riven-fields.yaml);
+ * this class only maps to it.
  */
 @Entity
 @Table(name = "riven_snapshots")
@@ -36,18 +37,6 @@ public class RivenSnapshot {
 	private @Nullable Integer buyoutPrice;
 
 	private boolean isDirectSell;
-
-	private int reRolls;
-
-	private short modRank;
-
-	private short masteryLevel;
-
-	private String polarity;
-
-	// item.attributes as sent: [{url_name, value, positive}]
-	@ColumnTransformer(write = "?::jsonb")
-	private String attributes;
 
 	// The whole auction object as sent, since history can't be refetched
 	@ColumnTransformer(write = "?::jsonb")
@@ -91,46 +80,6 @@ public class RivenSnapshot {
 
 	public void setDirectSell(boolean isDirectSell) {
 		this.isDirectSell = isDirectSell;
-	}
-
-	public int getReRolls() {
-		return reRolls;
-	}
-
-	public void setReRolls(int reRolls) {
-		this.reRolls = reRolls;
-	}
-
-	public short getModRank() {
-		return modRank;
-	}
-
-	public void setModRank(short modRank) {
-		this.modRank = modRank;
-	}
-
-	public short getMasteryLevel() {
-		return masteryLevel;
-	}
-
-	public void setMasteryLevel(short masteryLevel) {
-		this.masteryLevel = masteryLevel;
-	}
-
-	public String getPolarity() {
-		return polarity;
-	}
-
-	public void setPolarity(String polarity) {
-		this.polarity = polarity;
-	}
-
-	public String getAttributes() {
-		return attributes;
-	}
-
-	public void setAttributes(String attributes) {
-		this.attributes = attributes;
 	}
 
 	public String getRaw() {

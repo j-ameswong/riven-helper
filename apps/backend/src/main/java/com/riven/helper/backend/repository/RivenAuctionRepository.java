@@ -19,14 +19,17 @@ public interface RivenAuctionRepository extends Repository<RivenAuction, String>
 
 	/**
 	 * Inserts the auction, or moves an existing one's {@code last_updated_at}
-	 * forward and clears its {@code removed_at}, as it was just seen. In one
+	 * forward and clears its {@code removed_at}, as it was just seen. The riven
+	 * can't be edited, so an existing one's riven fields are kept. In one
 	 * statement, unlike {@code save}, so concurrent writers can't collide, and a
 	 * stale read never moves it backwards.
 	 */
 	@Modifying
 	@Query(nativeQuery = true, value = """
-			INSERT INTO riven_auctions (auction_id, weapon_id, owner_id, created_at, last_updated_at)
-			VALUES (:#{#a.auctionId}, :#{#a.weaponId}, :#{#a.ownerId}, :#{#a.createdAt}, :#{#a.lastUpdatedAt})
+			INSERT INTO riven_auctions (auction_id, weapon_id, owner_id, created_at, last_updated_at,
+				re_rolls, mod_rank, mastery_level, polarity)
+			VALUES (:#{#a.auctionId}, :#{#a.weaponId}, :#{#a.ownerId}, :#{#a.createdAt}, :#{#a.lastUpdatedAt},
+				:#{#a.reRolls}, :#{#a.modRank}, :#{#a.masteryLevel}, :#{#a.polarity})
 			ON CONFLICT (auction_id) DO UPDATE
 			SET last_updated_at = GREATEST(riven_auctions.last_updated_at, excluded.last_updated_at),
 				removed_at = NULL
@@ -53,12 +56,12 @@ public interface RivenAuctionRepository extends Repository<RivenAuction, String>
 	@Query("SELECT max(a.createdAt) FROM RivenAuction a")
 	Optional<OffsetDateTime> findNewestCreatedAt();
 
-	/** Counts the weapon's live auctions by the attributes of their latest snapshot. */
+	/** Counts the weapon's live auctions by their riven's search filters. */
 	@Query("""
-			SELECT new com.riven.helper.backend.repository.ListingCount(s.masteryLevel, s.reRolls, s.polarity, count(a))
-			FROM RivenAuction a JOIN RivenSnapshot s ON s.auctionId = a.auctionId AND s.updatedAt = a.lastUpdatedAt
+			SELECT new com.riven.helper.backend.repository.ListingCount(a.masteryLevel, a.reRolls, a.polarity, count(a))
+			FROM RivenAuction a
 			WHERE a.weaponId = :weaponId AND a.removedAt IS NULL
-			GROUP BY s.masteryLevel, s.reRolls, s.polarity
+			GROUP BY a.masteryLevel, a.reRolls, a.polarity
 			""")
 	List<ListingCount> countLive(@Param("weaponId") long weaponId);
 

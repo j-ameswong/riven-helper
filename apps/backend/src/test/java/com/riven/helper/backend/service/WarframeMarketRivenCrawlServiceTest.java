@@ -52,11 +52,17 @@ class WarframeMarketRivenCrawlServiceTest {
 				ON CONFLICT DO NOTHING
 				""").update();
 		jdbc.sql("UPDATE weapons SET last_crawled_at = CASE WHEN slug = 'rubico' THEN NULL ELSE now() END").update();
+		jdbc.sql("""
+				INSERT INTO attributes (api_attribute_id, slug, game_ref, attribute_group, prefix, suffix, name)
+				VALUES ('api-zoom', 'zoom', '/Lotus/x', 'default', 'Crita', 'Cron', 'zoom')
+				ON CONFLICT DO NOTHING
+				""").update();
 	}
 
 	@AfterEach
 	void clearTables() {
 		jdbc.sql("DELETE FROM riven_snapshots").update();
+		jdbc.sql("DELETE FROM riven_attributes").update();
 		jdbc.sql("DELETE FROM riven_auctions").update();
 		jdbc.sql("UPDATE weapons SET last_crawled_at = NULL").update();
 	}
@@ -68,6 +74,7 @@ class WarframeMarketRivenCrawlServiceTest {
 		assertThat(crawlService.crawlNext()).contains(new CrawlResult("rubico", 2, 1, 0, true));
 
 		assertThat(count("riven_snapshots")).isEqualTo(2);
+		assertThat(count("riven_attributes")).isEqualTo(2);
 		assertThat(count("weapons WHERE slug = 'rubico' AND last_crawled_at IS NOT NULL")).isOne();
 	}
 
@@ -88,16 +95,31 @@ class WarframeMarketRivenCrawlServiceTest {
 	}
 
 	@Test
-	void countsLiveAuctionsByTheirLatestSnapshot() {
-		givenBook(riven("a1", "2026-11-10T10:00"), riven("a2", "2026-11-10T10:00"));
+	void countsOnlyLiveAuctions() {
+		givenBook(riven("a1", "2026-11-10T10:00", "2026-11-10T10:00", 3),
+				riven("a2", "2026-11-10T10:00", "2026-11-10T10:00", 4));
+		crawlService.crawlNext();
+
+		givenRubicoIsNext();
+		givenBook(riven("a1", "2026-11-10T10:00"));
+		crawlService.crawlNext();
+
+		long rubico = jdbc.sql("SELECT weapon_id FROM weapons WHERE slug = 'rubico'").query(Long.class).single();
+		assertThat(auctionService.countLive(rubico)).containsExactly(new ListingCount((short) 12, 3, "madurai", 1));
+	}
+
+	@Test
+	void keepsTheRivenAsFirstSeenAcrossEdits() {
+		givenBook(riven("a1", "2026-11-10T10:00"));
 		crawlService.crawlNext();
 
 		givenRubicoIsNext();
 		givenBook(riven("a1", "2026-11-10T10:00", "2026-11-10T11:00", 4));
 		crawlService.crawlNext();
 
-		long rubico = jdbc.sql("SELECT weapon_id FROM weapons WHERE slug = 'rubico'").query(Long.class).single();
-		assertThat(auctionService.countLive(rubico)).containsExactly(new ListingCount((short) 12, 4, "madurai", 1));
+		assertThat(count("riven_snapshots")).isEqualTo(2);
+		assertThat(count("riven_attributes")).isOne();
+		assertThat(jdbc.sql("SELECT re_rolls FROM riven_auctions").query(Integer.class).single()).isEqualTo(3);
 	}
 
 	@Test

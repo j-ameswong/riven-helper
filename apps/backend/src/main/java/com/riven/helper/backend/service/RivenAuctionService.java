@@ -8,32 +8,43 @@ import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.riven.helper.backend.domain.RivenAttribute;
 import com.riven.helper.backend.domain.RivenAuction;
 import com.riven.helper.backend.domain.RivenSnapshot;
 import com.riven.helper.backend.repository.ListingCount;
+import com.riven.helper.backend.repository.RivenAttributeRepository;
 import com.riven.helper.backend.repository.RivenAuctionRepository;
 
-/** Owns every write to the riven_auctions table. */
+/** Owns every write to the riven_auctions and riven_attributes tables. */
 @Service
 public class RivenAuctionService {
 
 	private final RivenAuctionRepository auctionRepository;
 
+	private final RivenAttributeRepository attributeRepository;
+
 	private final RivenSnapshotService snapshotService;
 
-	RivenAuctionService(RivenAuctionRepository auctionRepository, RivenSnapshotService snapshotService) {
+	RivenAuctionService(RivenAuctionRepository auctionRepository, RivenAttributeRepository attributeRepository,
+			RivenSnapshotService snapshotService) {
 		this.auctionRepository = auctionRepository;
+		this.attributeRepository = attributeRepository;
 		this.snapshotService = snapshotService;
 	}
 
-	/** Upserts the auction and records {@code snapshot}, a version of it, together. */
+	/**
+	 * Upserts the auction with its riven's {@code attributes}, and records
+	 * {@code snapshot}, a version of it, together.
+	 */
 	@Transactional
-	public void archive(RivenAuction auction, RivenSnapshot snapshot) {
-		if (!snapshot.getAuctionId().equals(auction.getAuctionId())) {
-			throw new IllegalArgumentException("Snapshot of auction %s doesn't belong to auction %s"
-					.formatted(snapshot.getAuctionId(), auction.getAuctionId()));
+	public void archive(RivenAuction auction, List<RivenAttribute> attributes, RivenSnapshot snapshot) {
+		String auctionId = auction.getAuctionId();
+		if (!snapshot.getAuctionId().equals(auctionId)
+				|| attributes.stream().anyMatch(attribute -> !attribute.getAuctionId().equals(auctionId))) {
+			throw new IllegalArgumentException("Snapshot or attributes don't belong to auction " + auctionId);
 		}
 		auctionRepository.upsert(auction);
+		attributes.forEach(attributeRepository::insertIfAbsent);
 		snapshotService.record(snapshot);
 	}
 

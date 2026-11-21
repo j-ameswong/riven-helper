@@ -1,5 +1,7 @@
 package com.riven.helper.backend.service;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -7,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import com.riven.helper.backend.domain.RivenAttribute;
 import com.riven.helper.backend.domain.RivenAuction;
 import com.riven.helper.backend.domain.RivenSnapshot;
 import com.riven.helper.backend.dto.RivenAuctionDTO;
@@ -35,16 +38,27 @@ class RivenAuctionReader {
 		this.snapshotMapper = snapshotMapper;
 	}
 
-	record Riven(RivenAuction auction, RivenSnapshot snapshot) {
+	record Riven(RivenAuction auction, List<RivenAttribute> attributes, RivenSnapshot snapshot) {
+	}
+
+	/** Weapon and attribute ids, each keyed by slug, that an auction refers to. */
+	record Manifest(Map<String, Long> weaponIds, Map<String, Long> attributeIds) {
+
+		/** False for a malformed auction too, which {@link #read} skips anyway. */
+		boolean knows(JsonNode node) {
+			JsonNode item = node.path("item");
+			return weaponIds.containsKey(item.path("weapon_url_name").asString())
+					&& item.path("attributes").valueStream()
+							.allMatch(attribute -> attributeIds.containsKey(attribute.path("url_name").asString()));
+		}
+
 	}
 
 	/**
-	 * Skips, returning empty, a malformed auction or one for a weapon missing from
-	 * {@code weaponIds}.
-	 *
-	 * @param weaponIds weapon ids keyed by slug
+	 * Skips, returning empty, a malformed auction or one with a weapon or attribute
+	 * missing from {@code manifest}.
 	 */
-	Optional<Riven> read(JsonNode node, Map<String, Long> weaponIds) {
+	Optional<Riven> read(JsonNode node, Manifest manifest) {
 		RivenAuctionDTO auction;
 		try {
 			auction = jsonMapper.treeToValue(node, RivenAuctionDTO.class);
@@ -53,13 +67,22 @@ class RivenAuctionReader {
 			log.warn("Skipping malformed riven auction {}: {}", node.path("id"), ex.getOriginalMessage());
 			return Optional.empty();
 		}
-		Long weaponId = weaponIds.get(auction.item().weaponUrlName());
+		Long weaponId = manifest.weaponIds().get(auction.item().weaponUrlName());
 		if (weaponId == null) {
 			log.warn("Skipping riven auction {}: unknown weapon {}", auction.id(), auction.item().weaponUrlName());
 			return Optional.empty();
 		}
-		return Optional.of(
-				new Riven(auctionMapper.toEntity(auction, weaponId), snapshotMapper.toEntity(auction, node)));
+		List<RivenAttribute> attributes = new ArrayList<>();
+		for (RivenAuctionDTO.Attribute attribute : auction.item().attributes()) {
+			Long attributeId = manifest.attributeIds().get(attribute.urlName());
+			if (attributeId == null) {
+				log.warn("Skipping riven auction {}: unknown attribute {}", auction.id(), attribute.urlName());
+				return Optional.empty();
+			}
+			attributes.add(auctionMapper.toEntity(auction.id(), attributeId, attribute));
+		}
+		return Optional.of(new Riven(auctionMapper.toEntity(auction, weaponId), attributes,
+				snapshotMapper.toEntity(auction, node)));
 	}
 
 }
