@@ -43,6 +43,77 @@ public class RivenAuction {
 
 	private String polarity;
 
+	// For JPA
+	protected RivenAuction() {
+	}
+
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	public static final class Builder {
+
+		private final RivenAuction rivenAuction = new RivenAuction();
+
+		private Builder() {
+		}
+
+		public Builder auctionId(String auctionId) {
+			rivenAuction.auctionId = auctionId;
+			return this;
+		}
+
+		public Builder weaponId(long weaponId) {
+			rivenAuction.weaponId = weaponId;
+			return this;
+		}
+
+		public Builder ownerId(String ownerId) {
+			rivenAuction.ownerId = ownerId;
+			return this;
+		}
+
+		public Builder createdAt(OffsetDateTime createdAt) {
+			rivenAuction.createdAt = createdAt;
+			return this;
+		}
+
+		public Builder lastUpdatedAt(OffsetDateTime lastUpdatedAt) {
+			rivenAuction.lastUpdatedAt = lastUpdatedAt;
+			return this;
+		}
+
+		public Builder removedAt(@Nullable OffsetDateTime removedAt) {
+			rivenAuction.removedAt = removedAt;
+			return this;
+		}
+
+		public Builder reRolls(int reRolls) {
+			rivenAuction.reRolls = reRolls;
+			return this;
+		}
+
+		public Builder modRank(short modRank) {
+			rivenAuction.modRank = modRank;
+			return this;
+		}
+
+		public Builder masteryLevel(short masteryLevel) {
+			rivenAuction.masteryLevel = masteryLevel;
+			return this;
+		}
+
+		public Builder polarity(String polarity) {
+			rivenAuction.polarity = polarity;
+			return this;
+		}
+
+		public RivenAuction build() {
+			return rivenAuction;
+		}
+
+	}
+
 	public String getAuctionId() {
 		return auctionId;
 	}

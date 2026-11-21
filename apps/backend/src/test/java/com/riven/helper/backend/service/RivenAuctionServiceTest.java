@@ -40,8 +40,7 @@ class RivenAuctionServiceTest {
 
 	@Test
 	void writesNothingMoreForAnAuctionAlreadyStoredAsSeen() {
-		RivenAuction auction = new RivenAuction();
-		auction.setAuctionId("a1");
+		RivenAuction auction = RivenAuction.builder().auctionId("a1").build();
 		when(auctionRepository.upsert(auction)).thenReturn(0);
 
 		auctionService.archive(auction, List.of(attributeOf("a1")), snapshotOf("a1"));
@@ -51,8 +50,7 @@ class RivenAuctionServiceTest {
 	}
 
 	private void assertRejectedBeforeWriting(List<RivenAttribute> attributes, RivenSnapshot snapshot) {
-		RivenAuction auction = new RivenAuction();
-		auction.setAuctionId("a1");
+		RivenAuction auction = RivenAuction.builder().auctionId("a1").build();
 
 		assertThatThrownBy(() -> auctionService.archive(auction, attributes, snapshot))
 				.isInstanceOf(IllegalArgumentException.class).hasMessageContaining("a1");
@@ -62,15 +60,11 @@ class RivenAuctionServiceTest {
 	}
 
 	private static RivenAttribute attributeOf(String auctionId) {
-		RivenAttribute attribute = new RivenAttribute();
-		attribute.setAuctionId(auctionId);
-		return attribute;
+		return RivenAttribute.builder().auctionId(auctionId).build();
 	}
 
 	private static RivenSnapshot snapshotOf(String auctionId) {
-		RivenSnapshot snapshot = new RivenSnapshot();
-		snapshot.setAuctionId(auctionId);
-		return snapshot;
+		return RivenSnapshot.builder().auctionId(auctionId).build();
 	}
 
 }

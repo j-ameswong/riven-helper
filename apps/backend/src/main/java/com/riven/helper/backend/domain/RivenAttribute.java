@@ -32,6 +32,47 @@ public class RivenAttribute {
 	// Whether the stat helps the weapon, not the sign of value
 	private boolean positive;
 
+	// For JPA
+	protected RivenAttribute() {
+	}
+
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	public static final class Builder {
+
+		private final RivenAttribute rivenAttribute = new RivenAttribute();
+
+		private Builder() {
+		}
+
+		public Builder auctionId(String auctionId) {
+			rivenAttribute.auctionId = auctionId;
+			return this;
+		}
+
+		public Builder attributeId(long attributeId) {
+			rivenAttribute.attributeId = attributeId;
+			return this;
+		}
+
+		public Builder value(double value) {
+			rivenAttribute.value = value;
+			return this;
+		}
+
+		public Builder positive(boolean positive) {
+			rivenAttribute.positive = positive;
+			return this;
+		}
+
+		public RivenAttribute build() {
+			return rivenAttribute;
+		}
+
+	}
+
 	public String getAuctionId() {
 		return auctionId;
 	}

@@ -39,6 +39,67 @@ public class Weapon {
 
 	private String name;
 
+	// For JPA
+	protected Weapon() {
+	}
+
+	public static Builder builder() {
+		return new Builder();
+	}
+
+	public static final class Builder {
+
+		private final Weapon weapon = new Weapon();
+
+		private Builder() {
+		}
+
+		public Builder weaponId(@Nullable Long weaponId) {
+			weapon.weaponId = weaponId;
+			return this;
+		}
+
+		public Builder apiWeaponId(String apiWeaponId) {
+			weapon.apiWeaponId = apiWeaponId;
+			return this;
+		}
+
+		public Builder slug(String slug) {
+			weapon.slug = slug;
+			return this;
+		}
+
+		public Builder gameRef(String gameRef) {
+			weapon.gameRef = gameRef;
+			return this;
+		}
+
+		public Builder weaponGroup(WeaponGroup weaponGroup) {
+			weapon.weaponGroup = weaponGroup;
+			return this;
+		}
+
+		public Builder rivenType(RivenType rivenType) {
+			weapon.rivenType = rivenType;
+			return this;
+		}
+
+		public Builder reqMasteryRank(short reqMasteryRank) {
+			weapon.reqMasteryRank = reqMasteryRank;
+			return this;
+		}
+
+		public Builder name(String name) {
+			weapon.name = name;
+			return this;
+		}
+
+		public Weapon build() {
+			return weapon;
+		}
+
+	}
+
 	public @Nullable Long getWeaponId() {
 		return weaponId;
 	}
