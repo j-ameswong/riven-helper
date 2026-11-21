@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.util.List;
 
@@ -35,6 +36,18 @@ class RivenAuctionServiceTest {
 	@Test
 	void rejectsAnAttributeOfAnotherAuctionBeforeWriting() {
 		assertRejectedBeforeWriting(List.of(attributeOf("a1"), attributeOf("a2")), snapshotOf("a1"));
+	}
+
+	@Test
+	void writesNothingMoreForAnAuctionAlreadyStoredAsSeen() {
+		RivenAuction auction = new RivenAuction();
+		auction.setAuctionId("a1");
+		when(auctionRepository.upsert(auction)).thenReturn(0);
+
+		auctionService.archive(auction, List.of(attributeOf("a1")), snapshotOf("a1"));
+
+		verify(attributeRepository, never()).insertIfAbsent(any());
+		verify(snapshotService, never()).record(any());
 	}
 
 	private void assertRejectedBeforeWriting(List<RivenAttribute> attributes, RivenSnapshot snapshot) {

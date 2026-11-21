@@ -319,7 +319,7 @@ endpoint returns the same fields.
 | `visible`, `private`, `closed` | boolean | |
 | `platform` | string | |
 | `crossplay` | boolean | |
-| `created`, `updated` | string | ISO-8601 with offset, e.g. `2026-10-26T23:35:48.000+00:00` |
+| `created`, `updated` | string | ISO-8601 with offset, e.g. `2026-10-26T23:35:48.000+00:00`. `updated` also moves when the seller saves the auction without changing anything |
 | `note`, `note_raw` | string | Seller's note (rendered and raw) |
 | `winner`, `is_marked_for`, `marked_operation_at` | null | Always `null` in every sample |
 | `owner` | object | See below |

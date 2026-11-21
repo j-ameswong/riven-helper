@@ -34,7 +34,8 @@ public class RivenAuctionService {
 
 	/**
 	 * Upserts the auction with its riven's {@code attributes}, and records
-	 * {@code snapshot}, a version of it, together.
+	 * {@code snapshot}, a version of it, together. Writes nothing for an auction
+	 * already stored as seen.
 	 */
 	@Transactional
 	public void archive(RivenAuction auction, List<RivenAttribute> attributes, RivenSnapshot snapshot) {
@@ -43,7 +44,9 @@ public class RivenAuctionService {
 				|| attributes.stream().anyMatch(attribute -> !attribute.getAuctionId().equals(auctionId))) {
 			throw new IllegalArgumentException("Snapshot or attributes don't belong to auction " + auctionId);
 		}
-		auctionRepository.upsert(auction);
+		if (auctionRepository.upsert(auction) == 0) {
+			return;
+		}
 		attributes.forEach(attributeRepository::insertIfAbsent);
 		snapshotService.record(snapshot);
 	}

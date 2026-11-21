@@ -23,6 +23,8 @@ public interface RivenAuctionRepository extends Repository<RivenAuction, String>
 	 * can't be edited, so an existing one's riven fields are kept. In one
 	 * statement, unlike {@code save}, so concurrent writers can't collide, and a
 	 * stale read never moves it backwards.
+	 *
+	 * @return 0 if the auction was already stored as seen, so nothing was written
 	 */
 	@Modifying
 	@Query(nativeQuery = true, value = """
@@ -33,8 +35,10 @@ public interface RivenAuctionRepository extends Repository<RivenAuction, String>
 			ON CONFLICT (auction_id) DO UPDATE
 			SET last_updated_at = GREATEST(riven_auctions.last_updated_at, excluded.last_updated_at),
 				removed_at = NULL
+			-- A stale read still counts as a change, so its version gets a snapshot
+			WHERE riven_auctions.last_updated_at <> excluded.last_updated_at OR riven_auctions.removed_at IS NOT NULL
 			""")
-	void upsert(@Param("a") RivenAuction auction);
+	int upsert(@Param("a") RivenAuction auction);
 
 	/**
 	 * Marks the weapon's auctions that a crawl started at {@code crawlStartedAt}

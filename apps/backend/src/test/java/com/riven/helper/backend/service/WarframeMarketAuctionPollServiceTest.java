@@ -128,10 +128,25 @@ class WarframeMarketAuctionPollServiceTest {
 	void repeatedPollAddsNothingAndAnEditAddsASnapshot() {
 		givenFeed(riven("a1", "10:00", "10:00", "200"));
 		pollService.poll();
+		String rowVersion = auctionRowVersion();
 		pollService.poll();
 		assertThat(count("riven_snapshots")).isOne();
+		assertThat(auctionRowVersion()).as("an unchanged auction isn't rewritten").isEqualTo(rowVersion);
 
 		givenFeed(riven("a1", "10:00", "10:05", "150"));
+		pollService.poll();
+
+		assertThat(count("riven_snapshots")).isEqualTo(2);
+		assertThat(jdbc.sql("SELECT last_updated_at FROM riven_auctions").query(OffsetDateTime.class).single())
+				.isEqualTo(time("10:05"));
+	}
+
+	@Test
+	void keepsAStaleVersionReadLateWithoutMovingTheAuctionBack() {
+		givenFeed(riven("a1", "10:00", "10:05", "150"));
+		pollService.poll();
+
+		givenFeed(riven("a1", "10:00", "10:00", "200"));
 		pollService.poll();
 
 		assertThat(count("riven_snapshots")).isEqualTo(2);
@@ -239,6 +254,10 @@ class WarframeMarketAuctionPollServiceTest {
 				VALUES (?, ?, '/Lotus/x', 'default', 'Crita', 'Cron', ?)
 				ON CONFLICT DO NOTHING
 				""").params("api-" + slug, slug, slug).update();
+	}
+
+	private String auctionRowVersion() {
+		return jdbc.sql("SELECT xmin::text FROM riven_auctions").query(String.class).single();
 	}
 
 	private long count(String table) {
