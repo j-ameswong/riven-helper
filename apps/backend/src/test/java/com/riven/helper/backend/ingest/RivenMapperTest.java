@@ -1,0 +1,74 @@
+package com.riven.helper.backend.ingest;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+import java.time.OffsetDateTime;
+
+import org.junit.jupiter.api.Test;
+import org.mapstruct.factory.Mappers;
+
+import com.riven.helper.backend.auction.RivenAttribute;
+import com.riven.helper.backend.auction.RivenAuction;
+import com.riven.helper.backend.auction.RivenSnapshot;
+import com.riven.helper.backend.warframemarket.RivenAuctionDTO;
+
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+/** Maps an auction shaped like "Auction object" in docs/warframe-market-api.md. */
+class RivenMapperTest {
+
+	private static final JsonNode RAW = JsonMapper.builder().build().readTree("""
+			{
+			  "id": "a1", "starting_price": 100, "buyout_price": null, "is_direct_sell": false,
+			  "created": "2026-11-10T10:00:00.000+00:00", "updated": "2026-11-10T10:05:00.000+00:00",
+			  "owner": { "id": "owner-1", "ingame_name": "Seller" },
+			  "item": {
+			    "type": "riven", "weapon_url_name": "rubico", "polarity": "madurai",
+			    "mod_rank": 8, "mastery_level": 12, "re_rolls": 3,
+			    "attributes": [ { "url_name": "zoom", "value": -58.3, "positive": false } ]
+			  }
+			}
+			""");
+
+	private static final RivenAuctionDTO DTO = JsonMapper.builder().build().treeToValue(RAW, RivenAuctionDTO.class);
+
+	@Test
+	void mapsTheAuctionWithTheResolvedWeaponId() {
+		RivenAuction auction = Mappers.getMapper(RivenAuctionMapper.class).toEntity(DTO, 42);
+
+		assertThat(auction.getAuctionId()).isEqualTo("a1");
+		assertThat(auction.getWeaponId()).isEqualTo(42);
+		assertThat(auction.getOwnerId()).isEqualTo("owner-1");
+		assertThat(auction.getCreatedAt()).isEqualTo(OffsetDateTime.parse("2026-11-10T10:00:00Z"));
+		assertThat(auction.getLastUpdatedAt()).isEqualTo(OffsetDateTime.parse("2026-11-10T10:05:00Z"));
+		assertThat(auction.getRemovedAt()).isNull();
+		assertThat(auction.getModRank()).isEqualTo((short) 8);
+		assertThat(auction.getMasteryLevel()).isEqualTo((short) 12);
+		assertThat(auction.getReRolls()).isEqualTo(3);
+		assertThat(auction.getPolarity()).isEqualTo("madurai");
+	}
+
+	@Test
+	void mapsAnAttributeWithTheResolvedAttributeId() {
+		RivenAttribute attribute = Mappers.getMapper(RivenAuctionMapper.class)
+				.toEntity("a1", 7, DTO.item().attributes().getFirst());
+
+		assertThat(attribute.getAuctionId()).isEqualTo("a1");
+		assertThat(attribute.getAttributeId()).isEqualTo(7);
+		assertThat(attribute.getValue()).isEqualTo(-58.3);
+		assertThat(attribute.isPositive()).isFalse();
+	}
+
+	@Test
+	void mapsTheSnapshotKeepingTheRawJson() {
+		RivenSnapshot snapshot = Mappers.getMapper(RivenSnapshotMapper.class).toEntity(DTO, RAW);
+
+		assertThat(snapshot.getAuctionId()).isEqualTo("a1");
+		assertThat(snapshot.getUpdatedAt()).isEqualTo(OffsetDateTime.parse("2026-11-10T10:05:00Z"));
+		assertThat(snapshot.getStartingPrice()).isEqualTo(100);
+		assertThat(snapshot.getBuyoutPrice()).isNull();
+		assertThat(snapshot.getRaw()).isEqualTo(RAW.toString());
+	}
+
+}

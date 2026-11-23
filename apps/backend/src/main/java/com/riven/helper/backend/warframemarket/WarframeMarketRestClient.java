@@ -1,0 +1,43 @@
+package com.riven.helper.backend.warframemarket;
+
+import java.util.List;
+import java.util.Map;
+
+import org.jspecify.annotations.Nullable;
+import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.service.annotation.GetExchange;
+import org.springframework.web.service.annotation.HttpExchange;
+
+/**
+ * The warframe.market API, documented in docs/warframe-market-api.md. Spring
+ * generates the implementation, see {@link WarframeMarketClientConfiguration}.
+ *
+ * <p>Every call waits for a rate limit slot, so it can block. A non-2xx response
+ * throws a {@code RestClientResponseException}, and a 2xx with an empty body
+ * returns null.
+ */
+@HttpExchange(accept = MediaType.APPLICATION_JSON_VALUE)
+public interface WarframeMarketRestClient {
+
+	@GetExchange("/v2/versions")
+	@Nullable V2ResponseDTO<VersionsDTO> getVersions();
+
+	@GetExchange("/v2/riven/weapons")
+	@Nullable V2ResponseDTO<List<WeaponDTO>> getWeapons();
+
+	@GetExchange("/v2/riven/attributes")
+	@Nullable V2ResponseDTO<List<AttributeDTO>> getAttributes();
+
+	/** The 100 most recently created auctions of every type, newest first. */
+	@GetExchange("/v1/auctions")
+	@Nullable V1AuctionsDTO getAuctions();
+
+	/**
+	 * At most 100 riven auctions matching {@code filters}, which need a
+	 * {@code weapon_url_name}. Subject to the much stricter auction search limit.
+	 */
+	@GetExchange("/v1/auctions/search?type=riven")
+	@Nullable V1AuctionsDTO searchRivenAuctions(@RequestParam Map<String, String> filters);
+
+}

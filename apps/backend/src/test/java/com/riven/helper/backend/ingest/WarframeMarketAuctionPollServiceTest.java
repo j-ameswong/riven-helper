@@ -1,0 +1,295 @@
+package com.riven.helper.backend.ingest;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.OffsetDateTime;
+import java.util.Map;
+
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.simple.JdbcClient;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+import com.riven.helper.backend.TestcontainersConfiguration;
+import com.riven.helper.backend.auction.RivenAttribute;
+import com.riven.helper.backend.auction.RivenAttributeRepository;
+import com.riven.helper.backend.auction.RivenAuctionRepository;
+import com.riven.helper.backend.auction.RivenSnapshot;
+import com.riven.helper.backend.auction.RivenSnapshotRepository;
+import com.riven.helper.backend.manifest.WarframeMarketRivenSyncService;
+import com.riven.helper.backend.warframemarket.V1AuctionsDTO;
+import com.riven.helper.backend.warframemarket.WarframeMarketRestClient;
+
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * Runs the poll against the real schema with a mocked API, using auctions
+ * shaped like "Auction object" in docs/warframe-market-api.md.
+ */
+@SpringBootTest(properties = "riven-helper.scheduling.enabled=false")
+@Import(TestcontainersConfiguration.class)
+class WarframeMarketAuctionPollServiceTest {
+
+	@MockitoBean
+	WarframeMarketRestClient client;
+
+	@MockitoBean
+	WarframeMarketRivenSyncService syncService;
+
+	@Autowired
+	WarframeMarketAuctionPollService pollService;
+
+	@Autowired
+	JdbcClient jdbc;
+
+	@Autowired
+	JsonMapper mapper;
+
+	@Autowired
+	RivenAuctionRepository auctionRepository;
+
+	@Autowired
+	RivenAttributeRepository attributeRepository;
+
+	@Autowired
+	RivenSnapshotRepository snapshotRepository;
+
+	@BeforeEach
+	void givenRubicoAndItsStats() {
+		insertWeapon("rubico");
+		insertAttribute("critical_chance");
+		insertAttribute("zoom");
+	}
+
+	// After, not before: other test classes delete weapons and attributes, which these rows reference
+	@AfterEach
+	void clearTables() {
+		jdbc.sql("DELETE FROM riven_snapshots").update();
+		jdbc.sql("DELETE FROM riven_attributes").update();
+		jdbc.sql("DELETE FROM riven_auctions").update();
+		jdbc.sql("DELETE FROM weapons WHERE slug = 'brand_new_gun'").update();
+		jdbc.sql("DELETE FROM attributes WHERE slug = 'brand_new_stat'").update();
+	}
+
+	@Test
+	void archivesRivensAndSkipsOtherAuctions() {
+		givenFeed(riven("a1", "10:00", "10:00", "200"), """
+				{ "id": "lich1", "item": { "type": "lich", "weapon_url_name": "kuva_bramma" } }
+				""");
+
+		assertThat(pollService.poll()).isEqualTo(new WarframeMarketAuctionPollService.PollResult(1, false));
+
+		assertThat(jdbc.sql("""
+				SELECT w.slug, a.owner_id, a.polarity FROM riven_auctions a JOIN weapons w USING (weapon_id)
+				WHERE a.auction_id = 'a1'
+				""").query().singleRow())
+				.isEqualTo(Map.of("slug", "rubico", "owner_id", "owner-a1", "polarity", "madurai"));
+		assertThat(jdbc.sql("""
+				SELECT t.slug, r.value, r.positive FROM riven_attributes r JOIN attributes t USING (attribute_id)
+				WHERE r.auction_id = 'a1' ORDER BY t.slug
+				""").query().listOfRows()).containsExactly(
+						Map.of("slug", "critical_chance", "value", 120.5, "positive", true),
+						Map.of("slug", "zoom", "value", -58.3, "positive", false));
+		assertThat(jdbc.sql("""
+				SELECT buyout_price, raw->'owner'->>'ingame_name' AS seller FROM riven_snapshots WHERE auction_id = 'a1'
+				""").query().singleRow()).isEqualTo(Map.of("buyout_price", 200, "seller", "Seller"));
+		assertThat(count("riven_auctions")).isOne();
+		verify(syncService, never()).sync(anyBoolean());
+	}
+
+	@Test
+	void entitiesReadBackWhatThePollWrote() {
+		givenFeed(riven("a1", "10:00", "10:05", "200"));
+		pollService.poll();
+
+		assertThat(auctionRepository.findById("a1")).hasValueSatisfying(auction -> {
+			assertThat(auction.getOwnerId()).isEqualTo("owner-a1");
+			assertThat(auction.getCreatedAt()).isEqualTo(time("10:00"));
+			assertThat(auction.getRemovedAt()).isNull();
+			assertThat(auction.getMasteryLevel()).isEqualTo((short) 12);
+		});
+		assertThat(attributeRepository.findByAuctionId("a1")).extracting(RivenAttribute::getValue)
+				.containsExactlyInAnyOrder(120.5, -58.3);
+		assertThat(snapshotRepository.findById(new RivenSnapshot.Key("a1", time("10:05")))).hasValueSatisfying(
+				snapshot -> {
+					assertThat(snapshot.getBuyoutPrice()).isEqualTo(200);
+					assertThat(snapshot.isDirectSell()).isFalse();
+					assertThat(snapshot.getRaw()).contains("\"ingame_name\"");
+				});
+	}
+
+	@Test
+	void repeatedPollAddsNothingAndAnEditAddsASnapshot() {
+		givenFeed(riven("a1", "10:00", "10:00", "200"));
+		pollService.poll();
+		String rowVersion = auctionRowVersion();
+		pollService.poll();
+		assertThat(count("riven_snapshots")).isOne();
+		assertThat(auctionRowVersion()).as("an unchanged auction isn't rewritten").isEqualTo(rowVersion);
+
+		givenFeed(riven("a1", "10:00", "10:05", "150"));
+		pollService.poll();
+
+		assertThat(count("riven_snapshots")).isEqualTo(2);
+		assertThat(jdbc.sql("SELECT last_updated_at FROM riven_auctions").query(OffsetDateTime.class).single())
+				.isEqualTo(time("10:05"));
+	}
+
+	@Test
+	void keepsAStaleVersionReadLateWithoutMovingTheAuctionBack() {
+		givenFeed(riven("a1", "10:00", "10:05", "150"));
+		pollService.poll();
+
+		givenFeed(riven("a1", "10:00", "10:00", "200"));
+		pollService.poll();
+
+		assertThat(count("riven_snapshots")).isEqualTo(2);
+		assertThat(jdbc.sql("SELECT last_updated_at FROM riven_auctions").query(OffsetDateTime.class).single())
+				.isEqualTo(time("10:05"));
+	}
+
+	@Test
+	void keepsPureAuctionsWithNoBuyout() {
+		givenFeed(riven("a1", "10:00", "10:00", "null"));
+		pollService.poll();
+
+		assertThat(count("riven_snapshots WHERE buyout_price IS NULL")).isOne();
+	}
+
+	@Test
+	void skipsAMalformedRivenButKeepsTheRest() {
+		givenFeed(riven("a1", "10:00", "10:00", "200"), """
+				{ "id": "bad", "item": { "type": "riven" } }
+				""");
+
+		assertThat(pollService.poll().rivens()).isOne();
+		assertThat(count("riven_auctions")).isOne();
+	}
+
+	@Test
+	void skipsARivenForAWeaponTheSyncDoesNotFind() {
+		givenFeed(riven("a1", "10:00", "10:00", "200"), riven("a2", "10:00", "10:00", "200", "brand_new_gun"));
+
+		assertThat(pollService.poll().rivens()).isOne();
+		assertThat(count("riven_auctions")).isOne();
+		verify(syncService).sync(false);
+	}
+
+	@Test
+	void keepsARivenForAWeaponTheSyncPicksUp() {
+		givenFeed(riven("a1", "10:00", "10:00", "200", "brand_new_gun"));
+		when(syncService.sync(false)).thenAnswer(invocation -> {
+			insertWeapon("brand_new_gun");
+			return null;
+		});
+
+		assertThat(pollService.poll().rivens()).isOne();
+	}
+
+	@Test
+	void skipsARivenWithAnAttributeTheSyncDoesNotFind() {
+		givenFeed(riven("a1", "10:00", "10:00", "200"),
+				riven("a2", "10:00", "10:00", "200").replace("\"zoom\"", "\"brand_new_stat\""));
+
+		assertThat(pollService.poll().rivens()).isOne();
+		assertThat(count("riven_attributes WHERE auction_id = 'a2'")).isZero();
+		verify(syncService).sync(false);
+	}
+
+	@Test
+	void keepsARivenWithAnAttributeTheSyncPicksUp() {
+		givenFeed(riven("a1", "10:00", "10:00", "200").replace("\"zoom\"", "\"brand_new_stat\""));
+		when(syncService.sync(false)).thenAnswer(invocation -> {
+			insertAttribute("brand_new_stat");
+			return null;
+		});
+
+		assertThat(pollService.poll().rivens()).isOne();
+		assertThat(count("riven_attributes WHERE auction_id = 'a1'")).isEqualTo(2);
+	}
+
+	@Test
+	void skipsTheUnknownRivenWhenTheSyncFails() {
+		givenFeed(riven("a1", "10:00", "10:00", "200"), riven("a2", "10:00", "10:00", "200", "brand_new_gun"));
+		when(syncService.sync(false)).thenThrow(new IllegalStateException("429"));
+
+		assertThat(pollService.poll().rivens()).isOne();
+	}
+
+	@Test
+	void flagsAGapOnlyWhenTheFeedNoLongerOverlapsTheArchive() {
+		givenFeed(riven("a1", "10:00", "10:00", "200"));
+		assertThat(pollService.poll().gap()).isFalse();
+
+		givenFeed(riven("a2", "10:20", "10:20", "200"), riven("a1", "10:00", "10:00", "200"));
+		assertThat(pollService.poll().gap()).isFalse();
+
+		givenFeed(riven("a3", "10:40", "10:40", "200"));
+		assertThat(pollService.poll().gap()).isTrue();
+	}
+
+	private void givenFeed(String... auctions) {
+		when(client.getAuctions()).thenReturn(mapper.readValue("""
+				{ "payload": { "auctions": [ %s ] } }
+				""".formatted(String.join(",", auctions)), V1AuctionsDTO.class));
+	}
+
+	private void insertWeapon(String slug) {
+		jdbc.sql("""
+				INSERT INTO weapons (api_weapon_id, slug, game_ref, weapon_group, riven_type, req_mastery_rank, name)
+				VALUES (?, ?, '/Lotus/x', 'primary', 'rifle', 4, ?)
+				ON CONFLICT DO NOTHING
+				""").params("api-" + slug, slug, slug).update();
+	}
+
+	private void insertAttribute(String slug) {
+		jdbc.sql("""
+				INSERT INTO attributes (api_attribute_id, slug, game_ref, attribute_group, prefix, suffix, name)
+				VALUES (?, ?, '/Lotus/x', 'default', 'Crita', 'Cron', ?)
+				ON CONFLICT DO NOTHING
+				""").params("api-" + slug, slug, slug).update();
+	}
+
+	private String auctionRowVersion() {
+		return jdbc.sql("SELECT xmin::text FROM riven_auctions").query(String.class).single();
+	}
+
+	private long count(String table) {
+		return jdbc.sql("SELECT count(*) FROM " + table).query(Long.class).single();
+	}
+
+	private static OffsetDateTime time(String hhmm) {
+		return OffsetDateTime.parse("2026-11-10T" + hhmm + ":00.000+00:00");
+	}
+
+	private static String riven(String id, String created, String updated, String buyout) {
+		return riven(id, created, updated, buyout, "rubico");
+	}
+
+	private static String riven(String id, String created, String updated, String buyout, String weapon) {
+		return """
+				{
+				  "id": "%s", "starting_price": 100, "buyout_price": %s, "top_bid": null, "is_direct_sell": false,
+				  "created": "%s", "updated": "%s", "visible": true,
+				  "owner": { "id": "owner-%s", "ingame_name": "Seller", "status": "offline" },
+				  "item": {
+				    "type": "riven", "weapon_url_name": "%s", "name": "crita-satisco", "polarity": "madurai",
+				    "mod_rank": 0, "mastery_level": 12, "re_rolls": 3,
+				    "attributes": [
+				      { "url_name": "critical_chance", "value": 120.5, "positive": true },
+				      { "url_name": "zoom", "value": -58.3, "positive": false }
+				    ]
+				  }
+				}
+				""".formatted(id, buyout, time(created), time(updated), id, weapon);
+	}
+
+}
